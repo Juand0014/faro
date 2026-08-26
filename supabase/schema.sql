@@ -80,6 +80,7 @@ create table if not exists looks (
   check (status in ('sent', 'rated'))
 );
 create index if not exists looks_couple_idx on looks(couple_id, created_at desc);
+create index if not exists looks_designer_idx on looks(designer_id);
 alter table looks replica identity full;
 
 -- 2) HELPER: mi couple_id (SECURITY DEFINER evita recursión en RLS)
@@ -207,7 +208,44 @@ create policy looks_select on looks for select using (couple_id = my_couple_id()
 drop policy if exists looks_insert on looks;
 create policy looks_insert on looks for insert with check (couple_id = my_couple_id() and designer_id = auth.uid());
 drop policy if exists looks_update on looks;
-create policy looks_update on looks for update using (couple_id = my_couple_id()) with check (couple_id = my_couple_id());
+create policy looks_update on looks for update to authenticated
+  using (couple_id = my_couple_id()) with check (couple_id = my_couple_id());
+
+-- Un look enviado es un recuerdo: el cliente solo puede escribir la puntuación.
+-- join_couple es SECURITY DEFINER y conserva permiso para reasignar designer_id al cambiar de dispositivo.
+alter table looks drop constraint if exists looks_outfit_size;
+alter table looks add constraint looks_outfit_size
+  check (octet_length(outfit::text) <= 65536);
+
+revoke update on looks from anon, authenticated;
+grant update (rating, note, status) on looks to authenticated;
+
+create or replace function guard_look_update()
+returns trigger language plpgsql security invoker set search_path = public as $$
+begin
+  -- join_couple corre como postgres por SECURITY DEFINER. service_role queda como
+  -- escape explícito para migraciones; authenticated no puede elevar current_role.
+  if current_role in ('postgres', 'service_role') then return new; end if;
+
+  if new.designer_id is distinct from old.designer_id
+    or new.couple_id is distinct from old.couple_id
+    or new.title is distinct from old.title
+    or new.outfit is distinct from old.outfit
+    or new.created_at is distinct from old.created_at then
+    raise exception 'look_inmutable';
+  end if;
+  if auth.uid() = old.designer_id then raise exception 'no_autopuntuas'; end if;
+  if old.status <> 'sent' or new.status <> 'rated' or new.rating is null then
+    raise exception 'puntuacion_invalida';
+  end if;
+  new.note := left(coalesce(new.note, ''), 200);
+  new.updated_at := now();
+  return new;
+end $$;
+
+drop trigger if exists guard_look_update_trigger on looks;
+create trigger guard_look_update_trigger before update on looks
+for each row execute function guard_look_update();
 
 -- games: leer/crear/actualizar dentro de mi pareja
 drop policy if exists games_select on games;

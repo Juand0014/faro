@@ -8,8 +8,15 @@ export default function Nav({ route, live, chatUnread }: { route: string; live?:
   return (
     <nav className="nav">
       {items.map((i) => (
-        <a key={i.href} href={'#' + i.href} className={route.startsWith(i.href) ? 'active' : ''}>
-          <b className={(live && i.href === '/games') || (chatUnread && i.href === '/chat') ? 'haslive' : undefined}>{i.icon}</b>{i.label}
+        <a key={i.href} href={'#' + i.href} className={route.startsWith(i.href) ? 'active' : ''}
+          aria-current={route.startsWith(i.href) ? 'page' : undefined}>
+          <b aria-hidden="true"
+            className={(live && i.href === '/games') || (chatUnread && i.href === '/chat') ? 'haslive' : undefined}>
+            {i.icon}
+          </b>
+          {i.label}
+          {((live && i.href === '/games') || (chatUnread && i.href === '/chat')) &&
+            <span className="sr-only">, hay novedades</span>}
         </a>
       ))}
     </nav>
