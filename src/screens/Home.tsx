@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Member } from '../lib/session';
 import { localTime, dayStatus, STATUS_ES } from '../lib/clock';
+import { GAME_META } from '../lib/useActiveGames';
+import type { GameRow } from '../lib/useGame';
 
-export default function Home({ me }: { me: Member }) {
+export default function Home({ me, activeGames }: { me: Member; activeGames: GameRow[] }) {
   const [members, setMembers] = useState<Member[]>([]);
   const [online, setOnline] = useState<Set<string>>(new Set());
   const [beacon, setBeacon] = useState(false);
@@ -66,6 +68,17 @@ export default function Home({ me }: { me: Member }) {
           <p className="muted">Aún falta tu pareja. Comparte tu código desde la pantalla de inicio, o pídeselo.</p>
         </div>
       )}
+
+      {activeGames.filter((g) => g.state?.first && g.state.first !== me.id).map((g) => {
+        const meta = GAME_META[g.type];
+        if (!meta) return null;
+        return (
+          <a key={g.id} href={meta.href} className="card" style={{ display: 'block', textDecoration: 'none' }}>
+            <div className="livepill">{meta.icon} Tu pareja empezó {meta.name}</div>
+            <p className="muted" style={{ margin: '8px 0 0' }}>Entra a la misma partida →</p>
+          </a>
+        );
+      })}
 
       {flash && (
         <div style={{ position: 'fixed', bottom: 92, left: 0, right: 0, textAlign: 'center', zIndex: 60 }}>

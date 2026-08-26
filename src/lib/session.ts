@@ -5,6 +5,19 @@ export type Member = {
   city: string | null; last_seen: string;
 };
 
+export function authErrorMessage(error: unknown): string {
+  const raw = error && typeof error === 'object' && 'message' in error
+    ? String((error as { message: unknown }).message)
+    : String(error ?? '');
+  if (/anonymous/i.test(raw) || raw.includes('anonymous_provider_disabled')) {
+    return 'Falta activar Anonymous sign-ins en Supabase → Authentication → Providers.';
+  }
+  if (raw === 'no autenticado') {
+    return 'No hay sesión. Recarga la página o activa Anonymous sign-ins en Supabase.';
+  }
+  return raw || 'Error de autenticación';
+}
+
 export async function ensureAuth(): Promise<string> {
   const { data } = await supabase.auth.getSession();
   if (data.session) return data.session.user.id;

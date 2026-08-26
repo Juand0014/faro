@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { tz } from '../lib/session';
+import { authErrorMessage, ensureAuth, tz } from '../lib/session';
 
 export default function Pair({ onDone }: { onDone: () => void }) {
   const [mode, setMode] = useState<'choose' | 'create' | 'join'>('choose');
@@ -13,17 +13,31 @@ export default function Pair({ onDone }: { onDone: () => void }) {
 
   async function create() {
     setBusy(true); setErr('');
-    const { data, error } = await supabase.rpc('create_couple', { p_name: name, p_timezone: tz(), p_city: city || null });
-    setBusy(false);
-    if (error) return setErr(error.message);
-    setCreated(data as string);
+    try {
+      await ensureAuth();
+      const { data, error } = await supabase.rpc('create_couple', { p_name: name, p_timezone: tz(), p_city: city || null });
+      if (error) return setErr(authErrorMessage(error));
+      setCreated(data as string);
+    } catch (e) {
+      setErr(authErrorMessage(e));
+    } finally {
+      setBusy(false);
+    }
   }
   async function join() {
     setBusy(true); setErr('');
-    const { error } = await supabase.rpc('join_couple', { p_code: codeIn.toUpperCase(), p_name: name, p_timezone: tz(), p_city: city || null });
-    setBusy(false);
-    if (error) return setErr(error.message === 'codigo_invalido' ? 'Código no encontrado' : error.message === 'pareja_llena' ? 'Esa pareja ya está completa' : error.message);
-    onDone();
+    try {
+      await ensureAuth();
+      const { error } = await supabase.rpc('join_couple', { p_code: codeIn.toUpperCase(), p_name: name, p_timezone: tz(), p_city: city || null });
+      if (error) {
+        return setErr(error.message === 'codigo_invalido' ? 'Código no encontrado' : error.message === 'pareja_llena' ? 'Esa pareja ya está completa' : authErrorMessage(error));
+      }
+      onDone();
+    } catch (e) {
+      setErr(authErrorMessage(e));
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (

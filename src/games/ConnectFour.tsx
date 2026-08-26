@@ -20,7 +20,7 @@ function winner(b: string[]): string | null {
 }
 
 export default function ConnectFour({ me, partnerId }: { me: Member; partnerId: string | null }) {
-  const { game, loading, newGame, applyMove } =
+  const { game, loading, newGame, applyMove, notice } =
     useGame('c4', me, () => ({ board: empty(), first: me.id }));
 
   if (loading) return <div className="wrap"><p className="muted">Cargando…</p></div>;
@@ -30,8 +30,9 @@ export default function ConnectFour({ me, partnerId }: { me: Member; partnerId: 
       <a className="muted" href="#/games">← Juegos</a>
       <div className="title" style={{ marginTop: 8 }}>4 en línea</div>
       <div className="card center">
-        <p className="muted">No hay partida activa.</p>
+        <p className="muted">No hay partida activa. Si tu pareja empieza, entras solo a la suya.</p>
         <button className="btn" style={{ marginTop: 10 }} disabled={!partnerId} onClick={() => newGame(me.id)}>Empezar partida</button>
+        {partnerId && <p className="locked">Esperando a que alguien inicie…</p>}
         {!partnerId && <p className="locked">Necesitas a tu pareja enlazada para jugar.</p>}
       </div>
     </div>
@@ -61,6 +62,7 @@ export default function ConnectFour({ me, partnerId }: { me: Member; partnerId: 
     <div className="wrap">
       <a className="muted" href="#/games">← Juegos</a>
       <div className="title" style={{ marginTop: 8 }}>4 en línea</div>
+      {notice && <div className="livepill">{notice}</div>}
       <div className="turnbar">
         {game.status === 'won' ? (game.winner === me.id ? '🎉 ¡Ganaste!' : '😅 Ganó tu pareja')
           : game.status === 'draw' ? '🤝 Empate'

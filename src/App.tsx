@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { hasConfig } from './lib/supabase';
-import { ensureAuth, getMyMember, touchLastSeen, type Member } from './lib/session';
+import { authErrorMessage, ensureAuth, getMyMember, touchLastSeen, type Member } from './lib/session';
 import { supabase } from './lib/supabase';
 import { useHashRoute } from './lib/router';
 import Pair from './screens/Pair';
@@ -10,11 +10,13 @@ import Games from './screens/Games';
 import TicTacToe from './games/TicTacToe';
 import ConnectFour from './games/ConnectFour';
 import Nav from './components/Nav';
+import { useActiveGames } from './lib/useActiveGames';
 
 export default function App() {
   const [ready, setReady] = useState(false);
   const [member, setMember] = useState<Member | null>(null);
   const [partnerId, setPartnerId] = useState<string | null>(null);
+  const [authErr, setAuthErr] = useState('');
   const [route, go] = useHashRoute();
 
   async function refreshMember() {
@@ -29,7 +31,13 @@ export default function App() {
   useEffect(() => {
     (async () => {
       if (!hasConfig) { setReady(true); return; }
-      try { await ensureAuth(); await refreshMember(); await touchLastSeen(); } catch (e) { /* noop */ }
+      try {
+        await ensureAuth();
+        await refreshMember();
+        await touchLastSeen();
+      } catch (e) {
+        setAuthErr(authErrorMessage(e));
+      }
       setReady(true);
     })();
   }, []);
@@ -46,14 +54,34 @@ export default function App() {
   );
 
   if (!ready) return <div className="wrap"><p className="muted" style={{ marginTop: 40 }}>Cargando…</p></div>;
+  if (authErr) return (
+    <div className="wrap">
+      <div className="title" style={{ marginTop: 40 }}>🌊 Faro</div>
+      <div className="card">
+        <p className="err">{authErr}</p>
+        <p className="muted">
+          Ábrelo aquí:{' '}
+          <a href="https://supabase.com/dashboard/project/czhqqgtygjixcpxunzpo/auth/providers" target="_blank" rel="noreferrer">
+            Authentication → Providers
+          </a>
+          . Activa <strong>Anonymous sign-ins</strong>, guarda, y recarga esta página.
+        </p>
+      </div>
+    </div>
+  );
   if (!member) return <Pair onDone={refreshMember} />;
 
+  return <AppShell member={member} partnerId={partnerId} route={route} />;
+}
+
+function AppShell({ member, partnerId, route }: { member: Member; partnerId: string | null; route: string }) {
+  const activeGames = useActiveGames(member.couple_id);
   let screen;
   if (route.startsWith('/questions')) screen = <Questions me={member} />;
-  else if (route === '/games') screen = <Games />;
+  else if (route === '/games') screen = <Games me={member} active={activeGames} />;
   else if (route.startsWith('/game/ttt')) screen = <TicTacToe me={member} partnerId={partnerId} />;
   else if (route.startsWith('/game/c4')) screen = <ConnectFour me={member} partnerId={partnerId} />;
-  else screen = <Home me={member} />;
+  else screen = <Home me={member} activeGames={activeGames} />;
 
-  return (<>{screen}<Nav route={route} /></>);
+  return (<>{screen}<Nav route={route} live={activeGames.length > 0} /></>);
 }

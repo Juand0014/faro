@@ -3,12 +3,12 @@ const items = [
   { href: '/questions', icon: '💬', label: 'Pregunta' },
   { href: '/games', icon: '🎮', label: 'Juegos' },
 ];
-export default function Nav({ route }: { route: string }) {
+export default function Nav({ route, live }: { route: string; live?: boolean }) {
   return (
     <nav className="nav">
       {items.map((i) => (
         <a key={i.href} href={'#' + i.href} className={route.startsWith(i.href) ? 'active' : ''}>
-          <b>{i.icon}</b>{i.label}
+          <b className={live && i.href === '/games' ? 'haslive' : undefined}>{i.icon}</b>{i.label}
         </a>
       ))}
     </nav>

@@ -52,6 +52,7 @@ create table if not exists games (
   updated_at timestamptz not null default now()
 );
 create index if not exists games_couple_type_idx on games(couple_id, type);
+create unique index if not exists games_one_active_per_type on games (couple_id, type) where status = 'active';
 
 -- 2) HELPER: mi couple_id (SECURITY DEFINER evita recursión en RLS)
 create or replace function my_couple_id()
@@ -61,12 +62,12 @@ $$;
 
 -- 3) EMPAREJAMIENTO por código (RPC) ------------------------
 create or replace function create_couple(p_name text, p_timezone text, p_city text default null)
-returns text language plpgsql security definer set search_path = public as $$
+returns text language plpgsql security definer set search_path = public, extensions as $$
 declare v_code text; v_couple uuid;
 begin
   if auth.uid() is null then raise exception 'no autenticado'; end if;
   -- código de 6 caracteres sin ambigüedades
-  v_code := upper(substr(translate(encode(gen_random_bytes(6),'base64'),'0O1lI/+=','23456789'),1,6));
+  v_code := upper(substr(translate(encode(extensions.gen_random_bytes(6),'base64'),'0O1lI/+=','23456789'),1,6));
   insert into couples(code) values (v_code) returning id into v_couple;
   insert into members(id, couple_id, name, timezone, city)
     values (auth.uid(), v_couple, p_name, p_timezone, p_city)

@@ -39,6 +39,9 @@ label{display:block;font-size:13px;color:var(--lo);margin-top:14px}
 .nav a{flex:1;text-align:center;padding:11px 0 15px;color:var(--dim);font-size:11px;text-decoration:none}
 .nav a b{display:block;font-size:20px;margin-bottom:2px}
 .nav a.active{color:var(--gold)}
+.nav a b.haslive{position:relative}
+.nav a b.haslive::after{content:'';position:absolute;top:-2px;right:calc(50% - 16px);width:7px;height:7px;
+  border-radius:50%;background:var(--gold);box-shadow:0 0 0 2px rgba(11,13,22,.85)}
 
 /* mismo cielo */
 .sky{display:flex;gap:12px}
@@ -70,7 +73,11 @@ label{display:block;font-size:13px;color:var(--lo);margin-top:14px}
 
 .gamelist a{display:flex;align-items:center;gap:12px;padding:16px;border:1px solid var(--line);
   border-radius:16px;margin-top:12px;text-decoration:none;font-weight:600}
+.gamelist a.live{border-color:rgba(242,179,87,.45);box-shadow:0 0 0 1px rgba(242,179,87,.15)}
 .gamelist a b{font-size:24px}
+.livepill{display:inline-flex;align-items:center;gap:6px;margin-top:10px;font-size:12px;font-weight:700;
+  color:var(--gold);background:rgba(242,179,87,.12);border:1px solid rgba(242,179,87,.28);
+  border-radius:999px;padding:5px 11px}
 .turnbar{margin-top:12px;text-align:center;font-weight:700}
 .qtext{font-size:19px;font-weight:700;line-height:1.4}
 .qans{font-family:Georgia,serif;font-style:italic;line-height:1.5;margin-top:6px}
