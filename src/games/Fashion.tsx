@@ -31,7 +31,9 @@ export function useLooksInbox(coupleId: string, meId: string) {
       if (alive) setWaiting(n);
     };
     load();
-    const ch = supabase.channel(`looks-inbox:${coupleId}`)
+    // Sufijo único: dos instancias del hook con el mismo tema comparten canal y el segundo `on`
+    // explota por llegar después del `subscribe`.
+    const ch = supabase.channel(`looks-inbox:${coupleId}:${crypto.randomUUID()}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'looks', filter: `couple_id=eq.${coupleId}` }, load)
       .subscribe();
     return () => { alive = false; supabase.removeChannel(ch); };

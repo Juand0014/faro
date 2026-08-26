@@ -1,6 +1,5 @@
 import type { Member } from '../lib/session';
 import type { GameRow } from '../lib/useGame';
-import { useLooksInbox } from '../games/Fashion';
 
 const list = [
   { href: '/game/ttt', type: 'ttt', icon: '⭕', name: 'Tres en raya', desc: 'El clásico, rapidito.' },
@@ -12,9 +11,10 @@ const list = [
   { href: '/game/look', type: 'look', icon: '👗', name: 'Atelier', desc: 'Diseña un look. Tu pareja lo puntúa del 1 al 10 y queda guardado.' },
 ];
 
-export default function Games({ me, active, rematches }: { me: Member; active: GameRow[]; rematches: GameRow[] }) {
-  const looksWaiting = useLooksInbox(me.couple_id, me.id);
-
+export default function Games(
+  { me, active, rematches, looksWaiting }:
+  { me: Member; active: GameRow[]; rematches: GameRow[]; looksWaiting: number },
+) {
   return (
     <div className="wrap">
       <div className="title">Juegos</div>

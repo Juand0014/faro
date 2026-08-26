@@ -131,7 +131,7 @@ function AppShell({ member, partnerId, route }: { member: Member; partnerId: str
   let screen;
   if (route.startsWith('/chat')) screen = <Chat me={member} />;
   else if (route.startsWith('/questions')) screen = <Questions me={member} />;
-  else if (route === '/games') screen = <Games me={member} active={active} rematches={rematches} />;
+  else if (route === '/games') screen = <Games me={member} active={active} rematches={rematches} looksWaiting={looksWaiting} />;
   else if (route.startsWith('/game/ttt')) screen = <TicTacToe me={member} partnerId={partnerId} />;
   else if (route.startsWith('/game/c4')) screen = <ConnectFour me={member} partnerId={partnerId} />;
   else if (route.startsWith('/game/stop')) screen = <Stop me={member} partnerId={partnerId} />;
