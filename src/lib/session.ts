@@ -1,3 +1,4 @@
+import { detectPlace } from './place';
 import { supabase } from './supabase';
 
 export type Member = {
@@ -36,7 +37,12 @@ export async function getMyMember(): Promise<Member | null> {
 export async function touchLastSeen() {
   const { data: u } = await supabase.auth.getUser();
   if (!u.user) return;
-  await supabase.from('members').update({ last_seen: new Date().toISOString() }).eq('id', u.user.id);
+  const place = await detectPlace();
+  await supabase.from('members').update({
+    last_seen: new Date().toISOString(),
+    city: place.city,
+    timezone: place.timezone,
+  }).eq('id', u.user.id);
 }
 
-export const tz = () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+export { tz } from './place';

@@ -1,4 +1,4 @@
-const CACHE = 'faro-v3';
+const CACHE = 'faro-v4';
 self.addEventListener('install', (e) => { self.skipWaiting(); });
 self.addEventListener('activate', (e) => {
   e.waitUntil((async () => {

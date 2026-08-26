@@ -6,11 +6,12 @@
 }
 *{box-sizing:border-box}
 html,body,#root{height:100%;margin:0}
+html{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 body{background:radial-gradient(120% 90% at 50% -10%,#171c39 0%,#0b0d16 55%,#06070d 100%);
   color:var(--hi);font-family:var(--sans);-webkit-tap-highlight-color:transparent}
 a{color:inherit}
-.wrap{max-width:480px;margin:0 auto;padding:20px 18px 96px;min-height:100%}
-.title{font-size:22px;font-weight:700;margin:2px 0}
+.wrap{max-width:480px;margin:0 auto;padding:20px 18px calc(108px + env(safe-area-inset-bottom, 0px));min-height:100%}
+.title{font-size:22px;font-weight:700;margin:2px 0;text-wrap:balance}
 .muted{color:var(--lo);font-size:14px}
 .err{color:#ff8a9b;font-size:13px;margin-top:8px}
 .card{background:linear-gradient(180deg,rgba(23,27,51,.9),rgba(14,17,32,.9));
@@ -21,7 +22,10 @@ a{color:inherit}
 .btn:active{transform:scale(.98)} .btn:disabled{opacity:.5}
 .btn.ghost{background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--hi);font-weight:600}
 .input{width:100%;background:#0e1122;border:1px solid var(--line);color:var(--hi);border-radius:14px;
-  padding:13px 14px;font-size:15px;margin-top:8px;font-family:inherit}
+  padding:13px 14px;font-size:15px;margin-top:8px;font-family:inherit;outline:none}
+.input:focus{border-color:rgba(242,179,87,.55);box-shadow:0 0 0 3px rgba(242,179,87,.12)}
+.hero{margin:48px 0 10px}
+.hero-mark{font-size:44px;filter:drop-shadow(0 8px 18px rgba(242,179,87,.25))}
 label{display:block;font-size:13px;color:var(--lo);margin-top:14px}
 .code{font-family:ui-monospace,monospace;letter-spacing:8px;font-size:36px;font-weight:800;text-align:center;
   color:var(--gold);background:rgba(242,179,87,.08);border:1px dashed rgba(242,179,87,.4);
@@ -35,8 +39,8 @@ label{display:block;font-size:13px;color:var(--lo);margin-top:14px}
 
 /* nav */
 .nav{position:fixed;left:0;right:0;bottom:0;max-width:480px;margin:0 auto;display:flex;
-  background:rgba(11,13,22,.85);backdrop-filter:blur(10px);border-top:1px solid var(--line)}
-.nav a{flex:1;text-align:center;padding:11px 0 15px;color:var(--dim);font-size:11px;text-decoration:none}
+  background:rgba(11,13,22,.88);backdrop-filter:blur(14px);border-top:1px solid var(--line)}
+.nav a{flex:1;text-align:center;padding:11px 0 calc(14px + env(safe-area-inset-bottom, 0px));color:var(--dim);font-size:11px;text-decoration:none}
 .nav a b{display:block;font-size:20px;margin-bottom:2px}
 .nav a.active{color:var(--gold)}
 .nav a b.haslive{position:relative}
@@ -49,6 +53,9 @@ label{display:block;font-size:13px;color:var(--lo);margin-top:14px}
 .sky{display:flex;gap:12px}
 .sky .p{flex:1;border-radius:20px;padding:16px;border:1px solid var(--line);text-align:center;
   background:linear-gradient(180deg,rgba(23,27,51,.6),rgba(14,17,32,.6))}
+.sky .p.me{border-color:rgba(44,109,128,.45);background:linear-gradient(180deg,rgba(44,109,128,.18),rgba(14,17,32,.6))}
+.sky .p.you{border-color:rgba(210,79,118,.4);background:linear-gradient(180deg,rgba(210,79,118,.16),rgba(14,17,32,.6))}
+.sky .who{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:4px}
 .sky .nm{font-weight:700}.sky .tz{color:var(--dim);font-size:11px;margin-top:2px}
 .sky .clock{font-size:26px;font-weight:800;margin:10px 0 6px;font-variant-numeric:tabular-nums}
 .think{width:100%;padding:22px;border-radius:24px;border:none;cursor:pointer;color:#fff;font-size:18px;

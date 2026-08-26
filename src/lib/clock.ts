@@ -12,4 +12,4 @@ export function dayStatus(timezone: string, now = new Date()): 'awake' | 'workin
   if (h >= 9 && h < 18) return 'working';
   return 'awake';
 }
-export const STATUS_ES: Record<string, string> = { awake: 'Despierta', working: 'En el trabajo', asleep: 'Durmiendo', online: 'En línea', offline: 'Desconectada' };
+export const STATUS_ES: Record<string, string> = { awake: 'Despierto', working: 'En el día', asleep: 'Durmiendo', online: 'En línea', offline: 'Ausente' };

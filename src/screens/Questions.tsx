@@ -50,7 +50,9 @@ export default function Questions({ me }: { me: Member }) {
   return (
     <div className="wrap">
       <div className="title">Pregunta del día</div>
-      <p className="muted">{day}</p>
+      <p className="muted" style={{ textTransform: 'capitalize' }}>
+        {new Date().toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' })}
+      </p>
       <div className="card">
         <div className="qtext">{prompt}</div>
         {!both ? (

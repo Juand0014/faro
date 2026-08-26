@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Member } from '../lib/session';
 import { localTime, dayStatus, STATUS_ES } from '../lib/clock';
+import { prettyPlace } from '../lib/place';
 import { GAME_META } from '../lib/useActiveGames';
 import { rejectRematchOn, rematchOf, startAcceptedGame, type GameRow } from '../lib/useGame';
 
@@ -45,9 +46,10 @@ export default function Home({ me, activeGames, rematches }: { me: Member; activ
     const isOnline = m ? online.has(m.id) : false;
     const status = m ? (isOnline ? 'online' : dayStatus(m.timezone)) : 'offline';
     return (
-      <div className="p">
-        <div className="nm">{m?.name ?? 'Tu pareja'}</div>
-        <div className="tz">{m?.city || m?.timezone || '—'}</div>
+      <div className={'p' + (isMe ? ' me' : ' you')}>
+        <div className="who">{isMe ? 'Tú' : 'Tu pareja'}</div>
+        <div className="nm">{m?.name ?? '—'}</div>
+        <div className="tz">{m ? prettyPlace(m.city, m.timezone) : '—'}</div>
         <div className="clock">{m ? localTime(m.timezone) : '--:--'}</div>
         <div className="pill"><span className={'dot ' + status} />{STATUS_ES[status] ?? '—'}</div>
       </div>
@@ -58,7 +60,7 @@ export default function Home({ me, activeGames, rematches }: { me: Member; activ
     <div className="wrap">
       <div className={'beacon' + (beacon ? ' on' : '')} />
       <div className="title">Mismo cielo</div>
-      <p className="muted">Ahora mismo, los dos.</p>
+      <p className="muted">Ahora mismo, los dos, aunque el reloj no coincida.</p>
       <div className="sky" style={{ marginTop: 14 }}>{panel(mine, true)}{panel(partner, false)}</div>
 
       <button className="think" onClick={think}>Pienso en ti<span>Un toque enciende su faro</span></button>
