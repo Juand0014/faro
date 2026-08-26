@@ -1,4 +1,4 @@
-import { useGame } from '../lib/useGame';
+import { currentTurn, useGame } from '../lib/useGame';
 import type { Member } from '../lib/session';
 import RematchPanel from '../components/RematchPanel';
 
@@ -42,10 +42,10 @@ export default function ConnectFour({ me, partnerId }: { me: Member; partnerId: 
   const board: string[] = game.state.board;
   const firstId: string = game.state.first;
   const colorFor = (id: string) => (id === firstId ? 'R' : 'Y');
-  const mine = game.turn === me.id && game.status === 'active';
+  const mine = currentTurn(game, me.id, partnerId) === me.id && game.status === 'active';
 
   function drop(col: number) {
-    if (!game || !mine) return;
+    if (!game || !mine || !partnerId) return;
     let row = -1;
     for (let r = ROWS - 1; r >= 0; r--) if (!at(board, r, col)) { row = r; break; }
     if (row < 0) return; // columna llena

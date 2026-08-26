@@ -46,6 +46,14 @@ export async function getMyMember(): Promise<Member | null> {
   return (data as Member) ?? null;
 }
 
+/** El asiento actual de la pareja. Cambia si ella entra desde otro aparato, así que nunca se cachea. */
+export async function getPartnerId(coupleId: string, meId: string): Promise<string | null> {
+  const { data } = await supabase.from('members')
+    .select('id, last_seen').eq('couple_id', coupleId).neq('id', meId)
+    .order('last_seen', { ascending: false }).limit(1);
+  return (data as { id: string }[] | null)?.[0]?.id ?? null;
+}
+
 export async function getCoupleCode(coupleId: string): Promise<string | null> {
   const { data } = await supabase.from('couples').select('code').eq('id', coupleId).maybeSingle();
   return (data as { code?: string } | null)?.code ?? null;

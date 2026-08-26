@@ -1,4 +1,4 @@
-import { useGame } from '../lib/useGame';
+import { currentTurn, useGame } from '../lib/useGame';
 import type { Member } from '../lib/session';
 import RematchPanel from '../components/RematchPanel';
 
@@ -30,10 +30,10 @@ export default function TicTacToe({ me, partnerId }: { me: Member; partnerId: st
   const board: string[] = game.state.board;
   const firstId: string = game.state.first;
   const markFor = (id: string) => (id === firstId ? 'X' : 'O');
-  const mine = game.turn === me.id && game.status === 'active';
+  const mine = currentTurn(game, me.id, partnerId) === me.id && game.status === 'active';
 
   function play(i: number) {
-    if (!game || board[i] || !mine) return;
+    if (!game || board[i] || !mine || !partnerId) return;
     const nb = board.slice();
     nb[i] = markFor(me.id);
     const w = winner(nb);

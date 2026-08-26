@@ -6,6 +6,7 @@ export const GAME_META: Record<string, { name: string; href: string; icon: strin
   ttt: { name: 'Tres en raya', href: '#/game/ttt', icon: '⭕' },
   c4: { name: '4 en línea', href: '#/game/c4', icon: '🔴' },
   stop: { name: 'Stop', href: '#/game/stop', icon: '✏️' },
+  hang: { name: 'Ahorcado', href: '#/game/hang', icon: '🪢' },
 };
 
 export function useCoupleGames(coupleId: string) {

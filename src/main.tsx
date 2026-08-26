@@ -5,7 +5,7 @@ import './styles.css';
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register(import.meta.env.BASE_URL + 'sw.js?v=8').catch(() => {});
+    navigator.serviceWorker.register(import.meta.env.BASE_URL + 'sw.js?v=9').catch(() => {});
   });
 }
 

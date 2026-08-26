@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { hasConfig } from './lib/supabase';
-import { authErrorMessage, ensureAuth, getMyMember, touchLastSeen, type Member } from './lib/session';
+import { authErrorMessage, ensureAuth, getMyMember, getPartnerId, touchLastSeen, type Member } from './lib/session';
 import { supabase } from './lib/supabase';
 import { useHashRoute } from './lib/router';
 import Pair from './screens/Pair';
@@ -10,6 +10,7 @@ import Games from './screens/Games';
 import TicTacToe from './games/TicTacToe';
 import ConnectFour from './games/ConnectFour';
 import Stop from './games/Stop';
+import Hangman from './games/Hangman';
 import Nav from './components/Nav';
 import RematchOverlay from './components/RematchOverlay';
 import { useActiveGames } from './lib/useActiveGames';
@@ -26,11 +27,29 @@ export default function App() {
   async function refreshMember() {
     const m = await getMyMember();
     setMember(m);
-    if (m) {
-      const { data } = await supabase.from('members').select('id').eq('couple_id', m.couple_id).neq('id', m.id).maybeSingle();
-      setPartnerId((data as any)?.id ?? null);
-    }
+    if (m) setPartnerId(await getPartnerId(m.couple_id, m.id));
   }
+
+  // El asiento de la pareja cambia cuando entra desde otro aparato: hay que reseguirlo o los
+  // turnos quedarían apuntando a un id muerto.
+  useEffect(() => {
+    if (!member) return;
+    const { couple_id, id } = member;
+    const sync = async () => setPartnerId(await getPartnerId(couple_id, id));
+    const channel = supabase
+      .channel(`members:${couple_id}`)
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'members', filter: `couple_id=eq.${couple_id}` },
+        sync)
+      .subscribe();
+    const poll = setInterval(sync, 20000);
+    window.addEventListener('focus', sync);
+    return () => {
+      clearInterval(poll);
+      window.removeEventListener('focus', sync);
+      supabase.removeChannel(channel);
+    };
+  }, [member?.couple_id, member?.id]);
 
   useEffect(() => {
     (async () => {
@@ -108,6 +127,7 @@ function AppShell({ member, partnerId, route }: { member: Member; partnerId: str
   else if (route.startsWith('/game/ttt')) screen = <TicTacToe me={member} partnerId={partnerId} />;
   else if (route.startsWith('/game/c4')) screen = <ConnectFour me={member} partnerId={partnerId} />;
   else if (route.startsWith('/game/stop')) screen = <Stop me={member} partnerId={partnerId} />;
+  else if (route.startsWith('/game/hang')) screen = <Hangman me={member} partnerId={partnerId} />;
   else screen = <Home me={member} activeGames={active} rematches={rematches} />;
 
   return (
