@@ -172,6 +172,11 @@ export default function Stop({ me, partnerId }: { me: Member; partnerId: string 
     saveState(next);
   }
 
+  function endMatch() {
+    const w = matchWinner(st!.scores, players);
+    saveState({ ...st!, phase: 'match' }, { status: w ? 'won' : 'draw', winner: w });
+  }
+
   const setup = st.phase === 'setup';
   const play = st.phase === 'play';
   const vote = st.phase === 'vote';
@@ -241,6 +246,8 @@ export default function Stop({ me, partnerId }: { me: Member; partnerId: string 
               </label>
             ))}
             <button className="btn" style={{ marginTop: 16 }} onClick={() => mergeSheet({ stoppedBy: me.id })}>Stop</button>
+            <button className="btn ghost" style={{ marginTop: 10 }} onClick={endMatch}>Terminar partida</button>
+            <p className="locked">Cierra con el marcador de las rondas ya contadas.</p>
           </div>
         </>
       )}
@@ -263,6 +270,7 @@ export default function Stop({ me, partnerId }: { me: Member; partnerId: string 
           {st.round.voteReady?.[me.id]
             ? <p className="locked">Esperando el voto de tu pareja…</p>
             : <button className="btn" style={{ marginTop: 14 }} onClick={confirmVotes}>Confirmar votos</button>}
+          <button className="btn ghost" style={{ marginTop: 10 }} onClick={endMatch}>Terminar partida</button>
         </div>
       )}
 
@@ -284,6 +292,7 @@ export default function Stop({ me, partnerId }: { me: Member; partnerId: string 
             locked
           />
           <button className="btn" style={{ marginTop: 14 }} onClick={nextRound}>Siguiente letra</button>
+          <button className="btn ghost" style={{ marginTop: 10 }} onClick={endMatch}>Terminar partida</button>
         </div>
       )}
 
