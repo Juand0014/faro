@@ -91,3 +91,16 @@ label{display:block;font-size:13px;color:var(--lo);margin-top:14px}
 .qtext{font-size:19px;font-weight:700;line-height:1.4}
 .qans{font-family:Georgia,serif;font-style:italic;line-height:1.5;margin-top:6px}
 .locked{color:var(--dim);font-size:13px;margin-top:8px}
+
+.stop-letter{font-size:64px;font-weight:800;letter-spacing:4px;color:var(--gold);line-height:1;margin:8px 0}
+.stop-cats{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.stop-x{border:none;background:none;color:var(--lo);cursor:pointer;font-size:16px;padding:0 0 0 6px}
+.stop-opts{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.stop-opts .btn{width:auto;padding:8px 12px;font-size:13px}
+.btn.ghost.on{border-color:rgba(242,179,87,.55);color:var(--gold)}
+.stop-check{display:flex;align-items:center;gap:8px;margin-top:14px;font-size:14px;color:var(--lo)}
+.stop-score{display:flex;gap:16px;margin-top:12px;text-align:center}
+.stop-score > div{flex:1}
+.stop-vote{border-top:1px solid var(--line);padding:10px 0}
+.stop-ans{display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap}
+.stop-ans > span:nth-child(2){font-weight:600}

@@ -5,6 +5,7 @@ import { rematchOf, type GameRow } from './useGame';
 export const GAME_META: Record<string, { name: string; href: string; icon: string }> = {
   ttt: { name: 'Tres en raya', href: '#/game/ttt', icon: '⭕' },
   c4: { name: '4 en línea', href: '#/game/c4', icon: '🔴' },
+  stop: { name: 'Stop', href: '#/game/stop', icon: '✏️' },
 };
 
 export function useCoupleGames(coupleId: string) {

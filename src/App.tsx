@@ -9,6 +9,7 @@ import Questions from './screens/Questions';
 import Games from './screens/Games';
 import TicTacToe from './games/TicTacToe';
 import ConnectFour from './games/ConnectFour';
+import Stop from './games/Stop';
 import Nav from './components/Nav';
 import RematchOverlay from './components/RematchOverlay';
 import { useActiveGames } from './lib/useActiveGames';
@@ -106,6 +107,7 @@ function AppShell({ member, partnerId, route }: { member: Member; partnerId: str
   else if (route === '/games') screen = <Games me={member} active={active} rematches={rematches} />;
   else if (route.startsWith('/game/ttt')) screen = <TicTacToe me={member} partnerId={partnerId} />;
   else if (route.startsWith('/game/c4')) screen = <ConnectFour me={member} partnerId={partnerId} />;
+  else if (route.startsWith('/game/stop')) screen = <Stop me={member} partnerId={partnerId} />;
   else screen = <Home me={member} activeGames={active} rematches={rematches} />;
 
   return (

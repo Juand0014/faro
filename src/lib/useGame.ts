@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from './supabase';
 import type { Member } from './session';
 import { broadcastRematch, subscribeRematch } from './coupleLive';
+import { initialStopState } from './stop';
 
 export type Rematch = { from: string; status: 'pending' | 'accepted' | 'rejected' };
 
@@ -17,8 +18,9 @@ export function rematchOf(game: GameRow | null): Rematch | null {
   return null;
 }
 
-export function freshState(type: string, first: string) {
+export function freshState(type: string, first: string, prev?: any) {
   if (type === 'c4') return { board: Array(42).fill(''), first };
+  if (type === 'stop') return initialStopState(first, prev?.config);
   return { board: Array(9).fill(''), first };
 }
 
@@ -38,7 +40,7 @@ export async function startAcceptedGame(game: GameRow) {
   const first = game.state?.rematch?.from || game.state?.first;
   await saveState(game, { from: first, status: 'accepted' });
   const { data, error } = await supabase.from('games')
-    .insert({ couple_id: game.couple_id, type: game.type, state: freshState(game.type, first), turn: first, status: 'active' })
+    .insert({ couple_id: game.couple_id, type: game.type, state: freshState(game.type, first, game.state), turn: game.type === 'stop' ? null : first, status: 'active' })
     .select().single();
   if (error) {
     const { data: existing } = await supabase.from('games')

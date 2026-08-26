@@ -4,6 +4,7 @@ import type { GameRow } from '../lib/useGame';
 const list = [
   { href: '/game/ttt', type: 'ttt', icon: '⭕', name: 'Tres en raya', desc: 'El clásico, rapidito.' },
   { href: '/game/c4', type: 'c4', icon: '🔴', name: '4 en línea', desc: 'Conecta cuatro antes que tu pareja.' },
+  { href: '/game/stop', type: 'stop', icon: '✏️', name: 'Stop', desc: 'Una letra, muchas categorías. El primero en Stop cierra.' },
 ];
 
 export default function Games({ me, active, rematches }: { me: Member; active: GameRow[]; rematches: GameRow[] }) {
