@@ -87,8 +87,12 @@ export function useGame(type: string, me: Member, initial: () => any) {
     if (fromPartner && prev?.id !== row.id && row.status === 'active') {
       setNotice(prev && prev.status !== 'active' ? 'Revancha aceptada' : 'Tu pareja empezó la partida');
     }
+    if (prev?.id === row.id && prev.status === 'active' && row.status === 'abandoned'
+      && row.state?.stoppedBy && row.state.stoppedBy !== me.id) {
+      setNotice('Tu pareja detuvo la partida');
+    }
     setGame(row);
-  }, []);
+  }, [me.id]);
 
   const loadLatest = useCallback(async () => {
     const { data } = await supabase.from('games')
@@ -185,6 +189,26 @@ export function useGame(type: string, me: Member, initial: () => any) {
     await supabase.from('games').update(next).eq('id', game.id);
   }, [game]);
 
+  /** Cierra la partida en curso para los dos: `reset` abre una nueva vacía, `exit` no abre ninguna. */
+  const stopMatch = useCallback(async (mode: 'reset' | 'exit') => {
+    const current = gameRef.current;
+    if (!current) return;
+    const stopped = { ...current.state, stoppedBy: me.id };
+    delete stopped.rematch;
+    await supabase.from('games')
+      .update({ status: 'abandoned', state: stopped, updated_at: new Date().toISOString() })
+      .eq('id', current.id);
+    setNotice('');
+    setGame({ ...current, status: 'abandoned', state: stopped });
+    if (mode === 'exit') return;
+
+    const state = freshState(type, me.id);
+    const { data } = await supabase.from('games')
+      .insert({ couple_id: me.couple_id, type, state, turn: type === 'stop' ? null : me.id, status: 'active' })
+      .select().single();
+    if (data) setGame(data as GameRow);
+  }, [me.couple_id, me.id, type]);
+
   const askRematch = useCallback(async () => {
     const current = gameRef.current;
     if (!current || current.status === 'active') return;
@@ -221,5 +245,5 @@ export function useGame(type: string, me: Member, initial: () => any) {
     if (from) await broadcastRematch({ game: next, rematch: { from, status: 'rejected' } });
   }, []);
 
-  return { game, loading, newGame, applyMove, askRematch, acceptRematch, rejectRematch, reload: loadLatest, notice };
+  return { game, loading, newGame, applyMove, askRematch, acceptRematch, rejectRematch, stopMatch, reload: loadLatest, notice };
 }

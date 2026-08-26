@@ -1,6 +1,7 @@
 import { currentTurn, useGame } from '../lib/useGame';
 import type { Member } from '../lib/session';
 import RematchPanel from '../components/RematchPanel';
+import StopMatchPanel from '../components/StopMatchPanel';
 
 const ROWS = 6, COLS = 7;
 const empty = () => Array(ROWS * COLS).fill('');
@@ -21,7 +22,7 @@ function winner(b: string[]): string | null {
 }
 
 export default function ConnectFour({ me, partnerId }: { me: Member; partnerId: string | null }) {
-  const { game, loading, newGame, applyMove, askRematch, acceptRematch, rejectRematch, notice } =
+  const { game, loading, newGame, applyMove, askRematch, acceptRematch, rejectRematch, stopMatch, notice } =
     useGame('c4', me, () => ({ board: empty(), first: me.id }));
 
   if (loading) return <div className="wrap"><p className="muted">Cargando…</p></div>;
@@ -67,6 +68,7 @@ export default function ConnectFour({ me, partnerId }: { me: Member; partnerId: 
       <div className="turnbar">
         {game.status === 'won' ? (game.winner === me.id ? '🎉 ¡Ganaste!' : '😅 Ganó tu pareja')
           : game.status === 'draw' ? '🤝 Empate'
+          : game.status !== 'active' ? '⏹️ Partida detenida'
           : mine ? `Tu turno (${colorFor(me.id) === 'R' ? '🔴' : '🟡'})` : 'Turno de tu pareja…'}
       </div>
       <div className="c4">
@@ -78,6 +80,7 @@ export default function ConnectFour({ me, partnerId }: { me: Member; partnerId: 
         )}
       </div>
       <RematchPanel me={me} game={game} onAsk={askRematch} onAccept={acceptRematch} onReject={rejectRematch} />
+      {game.status === 'active' && <StopMatchPanel onStop={stopMatch} />}
     </div>
   );
 }

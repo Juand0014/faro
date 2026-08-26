@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGame } from '../lib/useGame';
 import type { Member } from '../lib/session';
 import RematchPanel from '../components/RematchPanel';
+import StopMatchPanel from '../components/StopMatchPanel';
 import { supabase } from '../lib/supabase';
 import {
   bothReady,
@@ -19,7 +20,7 @@ import {
 } from '../lib/stop';
 
 export default function Stop({ me, partnerId }: { me: Member; partnerId: string | null }) {
-  const { game, loading, newGame, applyMove, askRematch, acceptRematch, rejectRematch, notice } =
+  const { game, loading, newGame, applyMove, askRematch, acceptRematch, rejectRematch, stopMatch, notice } =
     useGame('stop', me, () => initialStopState(me.id));
 
   const [local, setLocal] = useState<Record<string, string>>({});
@@ -299,13 +300,16 @@ export default function Stop({ me, partnerId }: { me: Member; partnerId: string 
       {match && game.status !== 'active' && (
         <div className="card center">
           <div className="turnbar">
-            {game.status === 'draw' ? 'Empate' : (game.winner === me.id ? 'Ganaste la partida' : 'Ganó tu pareja')}
+            {game.status === 'abandoned' ? 'Partida detenida'
+              : game.status === 'draw' ? 'Empate'
+              : (game.winner === me.id ? 'Ganaste la partida' : 'Ganó tu pareja')}
           </div>
           <Scoreboard players={players} who={who} round={{}} total={st.scores} />
         </div>
       )}
 
       <RematchPanel me={me} game={game} onAsk={askRematch} onAccept={acceptRematch} onReject={rejectRematch} />
+      {game.status === 'active' && <StopMatchPanel onStop={stopMatch} />}
     </div>
   );
 }

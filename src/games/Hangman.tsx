@@ -2,13 +2,14 @@ import { useState } from 'react';
 import { useGame } from '../lib/useGame';
 import type { Member } from '../lib/session';
 import RematchPanel from '../components/RematchPanel';
+import StopMatchPanel from '../components/StopMatchPanel';
 import {
   allRevealed, applyGuess, HANG_LETTERS, hangNorm, initialHangState,
   letterCount, letterHits, MAX_WRONG, maskSecret, type HangState,
 } from '../lib/hangman';
 
 export default function Hangman({ me, partnerId }: { me: Member; partnerId: string | null }) {
-  const { game, loading, newGame, applyMove, askRematch, acceptRematch, rejectRematch, notice } =
+  const { game, loading, newGame, applyMove, askRematch, acceptRematch, rejectRematch, stopMatch, notice } =
     useGame('hang', me, () => initialHangState(me.id));
   const [draft, setDraft] = useState('');
 
@@ -93,7 +94,7 @@ export default function Hangman({ me, partnerId }: { me: Member; partnerId: stri
           <div className="hang-mask">{shown}</div>
           <div className="turnbar">
             {over
-              ? overText(game.winner, me.id, setter, iSet)
+              ? (game.status === 'abandoned' ? '⏹️ Partida detenida' : overText(game.winner, me.id, setter, iSet))
               : iGuess ? `Tu turno · ${lives} ${lives === 1 ? 'vida' : 'vidas'}`
                 : `Esperando a que adivine · ${lives} ${lives === 1 ? 'vida' : 'vidas'}`}
           </div>
@@ -115,6 +116,7 @@ export default function Hangman({ me, partnerId }: { me: Member; partnerId: stri
       )}
 
       <RematchPanel me={me} game={game} onAsk={askRematch} onAccept={acceptRematch} onReject={rejectRematch} />
+      {game.status === 'active' && <StopMatchPanel onStop={stopMatch} />}
     </div>
   );
 }

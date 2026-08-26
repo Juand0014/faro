@@ -1,6 +1,7 @@
 import { currentTurn, useGame } from '../lib/useGame';
 import type { Member } from '../lib/session';
 import RematchPanel from '../components/RematchPanel';
+import StopMatchPanel from '../components/StopMatchPanel';
 
 const LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
 function winner(b: string[]): string | null {
@@ -9,7 +10,7 @@ function winner(b: string[]): string | null {
 }
 
 export default function TicTacToe({ me, partnerId }: { me: Member; partnerId: string | null }) {
-  const { game, loading, newGame, applyMove, askRematch, acceptRematch, rejectRematch, notice } =
+  const { game, loading, newGame, applyMove, askRematch, acceptRematch, rejectRematch, stopMatch, notice } =
     useGame('ttt', me, () => ({ board: Array(9).fill(''), first: me.id }));
 
   if (loading) return <div className="wrap"><p className="muted">Cargando…</p></div>;
@@ -53,6 +54,7 @@ export default function TicTacToe({ me, partnerId }: { me: Member; partnerId: st
       <div className="turnbar">
         {game.status === 'won' ? (game.winner === me.id ? '🎉 ¡Ganaste!' : '😅 Ganó tu pareja')
           : game.status === 'draw' ? '🤝 Empate'
+          : game.status !== 'active' ? '⏹️ Partida detenida'
           : mine ? `Tu turno (${markFor(me.id)})` : 'Turno de tu pareja…'}
       </div>
       <div className="board">
@@ -61,6 +63,7 @@ export default function TicTacToe({ me, partnerId }: { me: Member; partnerId: st
         ))}
       </div>
       <RematchPanel me={me} game={game} onAsk={askRematch} onAccept={acceptRematch} onReject={rejectRematch} />
+      {game.status === 'active' && <StopMatchPanel onStop={stopMatch} />}
     </div>
   );
 }
