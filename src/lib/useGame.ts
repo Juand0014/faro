@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from './supabase';
 import type { Member } from './session';
+import { broadcastRematch, subscribeRematch } from './coupleLive';
 
 export type Rematch = { from: string; status: 'pending' | 'accepted' | 'rejected' };
 
@@ -72,14 +73,15 @@ export function useGame(type: string, me: Member, initial: () => any) {
   }, []);
 
   const loadLatest = useCallback(async () => {
-    const { data: active } = await supabase.from('games')
-      .select('*').eq('couple_id', me.couple_id).eq('type', type).eq('status', 'active')
-      .order('created_at', { ascending: false }).limit(1).maybeSingle();
-    if (active) return active as GameRow;
     const { data } = await supabase.from('games')
       .select('*').eq('couple_id', me.couple_id).eq('type', type)
-      .order('created_at', { ascending: false }).limit(1).maybeSingle();
-    return (data as GameRow) ?? null;
+      .order('updated_at', { ascending: false }).limit(12);
+    const rows = (data as GameRow[]) ?? [];
+    const pending = rows.find((g) => g.status !== 'active' && rematchOf(g)?.status === 'pending');
+    if (pending) return pending;
+    const active = rows.find((g) => g.status === 'active');
+    if (active) return active;
+    return rows[0] ?? null;
   }, [me.couple_id, type]);
 
   useEffect(() => {
@@ -119,11 +121,22 @@ export function useGame(type: string, me: Member, initial: () => any) {
       const prev = gameRef.current;
       const fromPartner = row.status === 'active' && row.state?.first && row.state.first !== me.id && prev?.id !== row.id;
       adopt(row, Boolean(fromPartner));
-    }, 2500);
+    }, 1500);
+
+    const offLive = subscribeRematch((e) => {
+      if (e.game.type !== type) return;
+      if (e.rematch.status === 'pending') adopt(e.game, false);
+      if (e.rematch.status === 'rejected' && e.rematch.from === me.id) {
+        setNotice('Tu pareja rechazó la revancha');
+        adopt(e.game, false);
+      }
+      if (e.rematch.status === 'accepted' && e.game.status === 'active') adopt(e.game, true);
+    });
 
     return () => {
       alive = false;
       clearInterval(poll);
+      offLive();
       supabase.removeChannel(channel);
     };
   }, [adopt, loadLatest, me.couple_id, me.id, type]);
@@ -166,13 +179,18 @@ export function useGame(type: string, me: Member, initial: () => any) {
     const next = await saveState(current, { from: me.id, status: 'pending' });
     setNotice('Esperando a que tu pareja acepte…');
     setGame(next);
+    await broadcastRematch({ game: next, rematch: { from: me.id, status: 'pending' } });
   }, [me.id]);
 
   const acceptRematch = useCallback(async () => {
     const current = gameRef.current;
     if (!current) return;
     const started = await startAcceptedGame(current);
-    if (started) { setNotice('Revancha aceptada'); setGame(started); }
+    if (started) {
+      setNotice('Revancha aceptada');
+      setGame(started);
+      await broadcastRematch({ game: started, rematch: { from: current.state?.rematch?.from || me.id, status: 'accepted' } });
+    }
   }, []);
 
   const rejectRematch = useCallback(async () => {
@@ -181,6 +199,8 @@ export function useGame(type: string, me: Member, initial: () => any) {
     const next = await rejectRematchOn(current);
     setNotice('');
     setGame(next);
+    const from = next.state?.rematch?.from;
+    if (from) await broadcastRematch({ game: next, rematch: { from, status: 'rejected' } });
   }, []);
 
   return { game, loading, newGame, applyMove, askRematch, acceptRematch, rejectRematch, reload: loadLatest, notice };

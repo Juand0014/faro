@@ -10,7 +10,10 @@ import Games from './screens/Games';
 import TicTacToe from './games/TicTacToe';
 import ConnectFour from './games/ConnectFour';
 import Nav from './components/Nav';
+import RematchOverlay from './components/RematchOverlay';
 import { useActiveGames } from './lib/useActiveGames';
+import { connectCoupleLive, subscribeRematch } from './lib/coupleLive';
+import type { GameRow } from './lib/useGame';
 
 export default function App() {
   const [ready, setReady] = useState(false);
@@ -76,7 +79,28 @@ export default function App() {
 
 function AppShell({ member, partnerId, route }: { member: Member; partnerId: string | null; route: string }) {
   const { active, rematches } = useActiveGames(member.couple_id);
+  const [invite, setInvite] = useState<GameRow | null>(null);
+  const [rejectedMsg, setRejectedMsg] = useState('');
   const incoming = rematches.filter((g) => g.state?.rematch?.status === 'pending' && g.state.rematch.from !== member.id);
+
+  useEffect(() => connectCoupleLive(member.couple_id), [member.couple_id]);
+  useEffect(() => subscribeRematch((e) => {
+    if (e.rematch.status === 'pending' && e.rematch.from !== member.id) {
+      setInvite(e.game);
+      navigator.vibrate?.(250);
+    }
+    if (e.rematch.status === 'rejected' && e.rematch.from === member.id) {
+      setInvite(null);
+      setRejectedMsg('Tu pareja rechazó la revancha');
+      window.setTimeout(() => setRejectedMsg(''), 7000);
+    }
+    if (e.rematch.status === 'accepted') setInvite(null);
+  }), [member.id]);
+
+  useEffect(() => {
+    if (incoming[0]) setInvite(incoming[0]);
+  }, [incoming[0]?.id]);
+
   let screen;
   if (route.startsWith('/questions')) screen = <Questions me={member} />;
   else if (route === '/games') screen = <Games me={member} active={active} rematches={rematches} />;
@@ -84,5 +108,16 @@ function AppShell({ member, partnerId, route }: { member: Member; partnerId: str
   else if (route.startsWith('/game/c4')) screen = <ConnectFour me={member} partnerId={partnerId} />;
   else screen = <Home me={member} activeGames={active} rematches={rematches} />;
 
-  return (<>{screen}<Nav route={route} live={active.length > 0 || incoming.length > 0} /></>);
+  return (
+    <>
+      {screen}
+      <Nav route={route} live={active.length > 0 || incoming.length > 0} />
+      {invite && <RematchOverlay me={member} game={invite} onClose={() => setInvite(null)} />}
+      {rejectedMsg && (
+        <div style={{ position: 'fixed', bottom: 92, left: 0, right: 0, textAlign: 'center', zIndex: 80 }}>
+          <span className="pill" style={{ background: 'rgba(255,138,155,.16)', color: '#ff8a9b' }}>{rejectedMsg}</span>
+        </div>
+      )}
+    </>
+  );
 }

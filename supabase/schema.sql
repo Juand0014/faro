@@ -53,6 +53,7 @@ create table if not exists games (
 );
 create index if not exists games_couple_type_idx on games(couple_id, type);
 create unique index if not exists games_one_active_per_type on games (couple_id, type) where status = 'active';
+alter table games replica identity full;
 
 -- 2) HELPER: mi couple_id (SECURITY DEFINER evita recursión en RLS)
 create or replace function my_couple_id()

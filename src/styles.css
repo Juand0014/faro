@@ -42,6 +42,8 @@ label{display:block;font-size:13px;color:var(--lo);margin-top:14px}
 .nav a b.haslive{position:relative}
 .nav a b.haslive::after{content:'';position:absolute;top:-2px;right:calc(50% - 16px);width:7px;height:7px;
   border-radius:50%;background:var(--gold);box-shadow:0 0 0 2px rgba(11,13,22,.85)}
+.overlay{position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;
+  padding:22px;background:rgba(6,7,13,.72);backdrop-filter:blur(8px)}
 
 /* mismo cielo */
 .sky{display:flex;gap:12px}
