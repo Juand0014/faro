@@ -132,6 +132,19 @@ create policy games_insert on games for insert with check (couple_id = my_couple
 drop policy if exists games_update on games;
 create policy games_update on games for update using (couple_id = my_couple_id()) with check (couple_id = my_couple_id());
 
+-- push: cada dispositivo guarda su suscripción
+create table if not exists push_subs (
+  endpoint   text primary key,
+  user_id    uuid not null references auth.users(id) on delete cascade,
+  couple_id  uuid not null references couples(id) on delete cascade,
+  p256dh     text not null,
+  auth       text not null,
+  created_at timestamptz not null default now()
+);
+alter table push_subs enable row level security;
+drop policy if exists push_own on push_subs;
+create policy push_own on push_subs for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+
 -- 5) REALTIME ----------------------------------------------
 alter publication supabase_realtime add table pings;
 alter publication supabase_realtime add table games;

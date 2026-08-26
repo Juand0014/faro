@@ -5,12 +5,14 @@ import { localTime, dayStatus, STATUS_ES } from '../lib/clock';
 import { prettyPlace } from '../lib/place';
 import { GAME_META } from '../lib/useActiveGames';
 import { rejectRematchOn, rematchOf, startAcceptedGame, type GameRow } from '../lib/useGame';
+import { enablePingNotices, iOSNeedsInstall, notifyPartner, notifySupported, showPingNotice } from '../lib/notify';
 
 export default function Home({ me, activeGames, rematches }: { me: Member; activeGames: GameRow[]; rematches: GameRow[] }) {
   const [members, setMembers] = useState<Member[]>([]);
   const [online, setOnline] = useState<Set<string>>(new Set());
   const [beacon, setBeacon] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
+  const [askNotify, setAskNotify] = useState(false);
   const [, tick] = useState(0);
 
   useEffect(() => {
@@ -20,10 +22,27 @@ export default function Home({ me, activeGames, rematches }: { me: Member; activ
   }, [me.couple_id]);
 
   useEffect(() => {
+    if (!notifySupported()) {
+      if (iOSNeedsInstall()) setAskNotify(true);
+      return;
+    }
+    if (Notification.permission === 'granted') enablePingNotices(me);
+    else if (Notification.permission === 'default') setAskNotify(true);
+  }, [me.id, me.couple_id]);
+
+  useEffect(() => {
     // pings entrantes
     const pingCh = supabase.channel('pings')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'pings', filter: `couple_id=eq.${me.couple_id}` },
-        (p: any) => { if (p.new.from_id !== me.id) { setBeacon(true); setFlash('💛 Está pensando en ti'); navigator.vibrate?.(200); setTimeout(() => setBeacon(false), 900); setTimeout(() => setFlash(null), 3000); } })
+        (p: any) => {
+          if (p.new.from_id === me.id) return;
+          setBeacon(true);
+          setFlash('💛 Está pensando en ti');
+          navigator.vibrate?.(200);
+          showPingNotice('💛 Está pensando en ti');
+          setTimeout(() => setBeacon(false), 900);
+          setTimeout(() => setFlash(null), 3000);
+        })
       .subscribe();
     // presencia
     const presCh = supabase.channel('presence', { config: { presence: { key: me.id } } });
@@ -37,6 +56,7 @@ export default function Home({ me, activeGames, rematches }: { me: Member; activ
     setBeacon(true); navigator.vibrate?.(60); setFlash('Señal enviada 🌟');
     setTimeout(() => setBeacon(false), 900); setTimeout(() => setFlash(null), 2000);
     await supabase.from('pings').insert({ couple_id: me.couple_id, from_id: me.id });
+    notifyPartner();
   }
 
   const partner = members.find((m) => m.id !== me.id) || null;
@@ -64,6 +84,22 @@ export default function Home({ me, activeGames, rematches }: { me: Member; activ
       <div className="sky" style={{ marginTop: 14 }}>{panel(mine, true)}{panel(partner, false)}</div>
 
       <button className="think" onClick={think}>Pienso en ti<span>Un toque enciende su faro</span></button>
+
+      {askNotify && (
+        <div className="card">
+          {iOSNeedsInstall() ? (
+            <p className="muted">En iPhone: comparte → <strong>Añadir a pantalla de inicio</strong> y luego activa avisos, para que “Pienso en ti” te llegue como notificación.</p>
+          ) : (
+            <>
+              <p className="muted">Activa avisos para que te llegue una notificación cuando tu pareja piense en ti.</p>
+              <button className="btn" style={{ marginTop: 12 }} onClick={async () => {
+                const perm = await enablePingNotices(me);
+                setAskNotify(perm !== 'granted');
+              }}>Activar notificaciones</button>
+            </>
+          )}
+        </div>
+      )}
 
       {!partner && (
         <div className="card">

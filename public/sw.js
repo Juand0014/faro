@@ -1,4 +1,4 @@
-const CACHE = 'faro-v4';
+const CACHE = 'faro-v5';
 self.addEventListener('install', (e) => { self.skipWaiting(); });
 self.addEventListener('activate', (e) => {
   e.waitUntil((async () => {
@@ -21,4 +21,30 @@ self.addEventListener('fetch', (e) => {
       }
     })
   );
+});
+
+self.addEventListener('push', (e) => {
+  let data = { title: 'Faro', body: '💛 Está pensando en ti' };
+  try { if (e.data) data = { ...data, ...e.data.json() }; } catch { /* keep default */ }
+  e.waitUntil(self.registration.showNotification(data.title || 'Faro', {
+    body: data.body || '💛 Está pensando en ti',
+    icon: './icon.svg',
+    badge: './icon.svg',
+    tag: 'faro-ping',
+    renotify: true,
+    vibrate: [180, 80, 180],
+    data: { url: './#/home' },
+  }));
+});
+
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const dest = new URL(e.notification.data?.url || './#/home', self.location.origin).href;
+  e.waitUntil((async () => {
+    const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const w of wins) {
+      if ('focus' in w) { w.postMessage({ type: 'faro-open' }); return w.focus(); }
+    }
+    if (self.clients.openWindow) return self.clients.openWindow(dest);
+  })());
 });
