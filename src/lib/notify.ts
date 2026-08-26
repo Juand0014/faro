@@ -3,6 +3,8 @@ import { supabase } from './supabase';
 const VAPID = import.meta.env.VITE_VAPID_PUBLIC_KEY
   || 'BCECdW8yxTmtyyFMxL5GjtzlkIaKPu2IwnQyq6N30STX3eUV_27NuqGrDRM9trHwGrrI-0nDU4DJpdWpRO84DRo';
 
+const ICON = './icon-192.png';
+
 export function canNotify() {
   return typeof window !== 'undefined' && 'Notification' in window && 'serviceWorker' in navigator;
 }
@@ -29,23 +31,41 @@ function toBytes(base64: string) {
   return Uint8Array.from(raw, (c) => c.charCodeAt(0));
 }
 
-export async function showPingNotice(body = '💛 Está pensando en ti') {
-  if (!canNotify() || Notification.permission !== 'granted') return;
-  const reg = await navigator.serviceWorker.ready;
-  await reg.showNotification('Faro', {
+function noticeOptions(body: string, tag: string): NotificationOptions {
+  return {
     body,
-    icon: './icon.svg',
-    badge: './icon.svg',
-    tag: 'faro-ping',
+    icon: ICON,
+    badge: ICON,
+    tag,
     renotify: true,
-    vibrate: [180, 80, 180],
     data: { url: './#/home' },
-  } as NotificationOptions);
+  } as NotificationOptions;
+}
+
+export async function showPingNotice(body = '💛 Está pensando en ti', tag = 'faro-ping') {
+  if (!canNotify() || Notification.permission !== 'granted') return false;
+  const opts = noticeOptions(body, tag);
+  try {
+    const reg = await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('sw')), 2500)),
+    ]);
+    await reg.showNotification('Faro', opts);
+    return true;
+  } catch {
+    try {
+      new Notification('Faro', { body, icon: ICON, tag });
+      return true;
+    } catch {
+      return false;
+    }
+  }
 }
 
 export async function enablePingNotices(me: { id: string; couple_id: string }) {
-  if (!notifySupported()) return Notification.permission as NotificationPermission;
-  const perm = await Notification.requestPermission();
+  if (!canNotify()) return 'denied' as NotificationPermission;
+  let perm = Notification.permission;
+  if (perm === 'default') perm = await Notification.requestPermission();
   if (perm !== 'granted') return perm;
   try {
     const reg = await navigator.serviceWorker.ready;
@@ -66,10 +86,10 @@ export async function enablePingNotices(me: { id: string; couple_id: string }) {
         auth: json.keys.auth,
       });
     }
-  } catch { /* permission granted; push may still fail on some browsers */ }
+  } catch { /* el aviso local igual funciona si el teléfono dio permiso */ }
   return perm;
 }
 
 export async function notifyPartner() {
-  try { await supabase.functions.invoke('notify-ping'); } catch { /* local notice still works */ }
+  try { await supabase.functions.invoke('notify-ping'); } catch { /* aviso local si la pestaña está abierta */ }
 }

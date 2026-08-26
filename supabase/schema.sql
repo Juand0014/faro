@@ -79,18 +79,57 @@ end $$;
 
 create or replace function join_couple(p_code text, p_name text, p_timezone text, p_city text default null)
 returns text language plpgsql security definer set search_path = public as $$
-declare v_couple uuid; v_count int;
+declare
+  v_couple uuid;
+  v_count int;
+  v_old uuid;
+  v_name text;
+  v_code text;
 begin
   if auth.uid() is null then raise exception 'no autenticado'; end if;
-  select id into v_couple from couples where code = upper(p_code);
+  v_name := trim(p_name);
+  v_code := upper(trim(p_code));
+  if v_name = '' then raise exception 'nombre_vacio'; end if;
+
+  select id into v_couple from couples where code = v_code;
   if v_couple is null then raise exception 'codigo_invalido'; end if;
-  select count(*) into v_count from members where couple_id = v_couple and id <> auth.uid();
-  if v_count >= 2 then raise exception 'pareja_llena'; end if;
+
+  if exists (select 1 from members where id = auth.uid() and couple_id = v_couple) then
+    update members
+      set name = v_name, timezone = p_timezone, city = p_city, last_seen = now()
+      where id = auth.uid();
+    return v_code;
+  end if;
+
+  -- mismo nombre = mismo asiento (cambio de celular / computadora)
+  select id into v_old
+    from members
+    where couple_id = v_couple
+      and lower(trim(name)) = lower(v_name)
+      and id <> auth.uid()
+    order by last_seen desc
+    limit 1;
+
+  if v_old is not null then
+    update pings set from_id = auth.uid() where from_id = v_old;
+    update daily_answers set member_id = auth.uid() where member_id = v_old;
+    update games
+      set turn = case when turn = v_old then auth.uid() else turn end,
+          winner = case when winner = v_old then auth.uid() else winner end,
+          state = replace(coalesce(state::text, '{}'), v_old::text, auth.uid()::text)::jsonb
+      where couple_id = v_couple;
+    delete from push_subs where user_id = v_old;
+    delete from members where id = v_old;
+  else
+    select count(*) into v_count from members where couple_id = v_couple and id <> auth.uid();
+    if v_count >= 2 then raise exception 'pareja_llena'; end if;
+  end if;
+
   insert into members(id, couple_id, name, timezone, city)
-    values (auth.uid(), v_couple, p_name, p_timezone, p_city)
+    values (auth.uid(), v_couple, v_name, p_timezone, p_city)
     on conflict (id) do update set couple_id = excluded.couple_id, name = excluded.name,
-      timezone = excluded.timezone, city = excluded.city;
-  return upper(p_code);
+      timezone = excluded.timezone, city = excluded.city, last_seen = now();
+  return v_code;
 end $$;
 
 -- 4) RLS ----------------------------------------------------

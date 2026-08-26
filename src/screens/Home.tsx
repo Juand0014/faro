@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import type { Member } from '../lib/session';
+import { getCoupleCode, leaveThisDevice, type Member } from '../lib/session';
 import { localTime, dayStatus, STATUS_ES } from '../lib/clock';
 import { prettyPlace } from '../lib/place';
 import { GAME_META } from '../lib/useActiveGames';
 import { rejectRematchOn, rematchOf, startAcceptedGame, type GameRow } from '../lib/useGame';
-import { enablePingNotices, iOSNeedsInstall, notifyPartner, notifySupported, showPingNotice } from '../lib/notify';
+import { canNotify, enablePingNotices, iOSNeedsInstall, notifyPartner, notifySupported, showPingNotice } from '../lib/notify';
 
 export default function Home({ me, activeGames, rematches }: { me: Member; activeGames: GameRow[]; rematches: GameRow[] }) {
   const [members, setMembers] = useState<Member[]>([]);
@@ -13,10 +13,15 @@ export default function Home({ me, activeGames, rematches }: { me: Member; activ
   const [beacon, setBeacon] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
   const [askNotify, setAskNotify] = useState(false);
+  const [notifyBlocked, setNotifyBlocked] = useState(false);
+  const [code, setCode] = useState<string | null>(null);
+  const [switchDevice, setSwitchDevice] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const [, tick] = useState(0);
 
   useEffect(() => {
     supabase.from('members').select('*').eq('couple_id', me.couple_id).then(({ data }) => setMembers((data as Member[]) ?? []));
+    getCoupleCode(me.couple_id).then(setCode);
     const t = setInterval(() => tick((n) => n + 1), 30000); // refresca relojes
     return () => clearInterval(t);
   }, [me.couple_id]);
@@ -26,8 +31,16 @@ export default function Home({ me, activeGames, rematches }: { me: Member; activ
       if (iOSNeedsInstall()) setAskNotify(true);
       return;
     }
-    if (Notification.permission === 'granted') enablePingNotices(me);
-    else if (Notification.permission === 'default') setAskNotify(true);
+    if (Notification.permission === 'granted') {
+      enablePingNotices(me);
+      setAskNotify(false);
+      setNotifyBlocked(false);
+    } else if (Notification.permission === 'denied') {
+      setAskNotify(true);
+      setNotifyBlocked(true);
+    } else {
+      setAskNotify(true);
+    }
   }, [me.id, me.couple_id]);
 
   useEffect(() => {
@@ -52,7 +65,23 @@ export default function Home({ me, activeGames, rematches }: { me: Member; activ
     return () => { supabase.removeChannel(pingCh); supabase.removeChannel(presCh); };
   }, [me.couple_id, me.id]);
 
+  async function askPhonePermission() {
+    const perm = await enablePingNotices(me);
+    if (perm === 'granted') {
+      setAskNotify(false);
+      setNotifyBlocked(false);
+      await showPingNotice('Así te va a llegar cuando piense en ti 💛', 'faro-on');
+      return true;
+    }
+    setAskNotify(true);
+    setNotifyBlocked(perm === 'denied');
+    return false;
+  }
+
   async function think() {
+    if (canNotify() && Notification.permission === 'default') {
+      await askPhonePermission();
+    }
     setBeacon(true); navigator.vibrate?.(60); setFlash('Señal enviada 🌟');
     setTimeout(() => setBeacon(false), 900); setTimeout(() => setFlash(null), 2000);
     await supabase.from('pings').insert({ couple_id: me.couple_id, from_id: me.id });
@@ -81,31 +110,53 @@ export default function Home({ me, activeGames, rematches }: { me: Member; activ
       <div className={'beacon' + (beacon ? ' on' : '')} />
       <div className="title">Mismo cielo</div>
       <p className="muted">Ahora mismo, los dos, aunque el reloj no coincida.</p>
-      <div className="sky" style={{ marginTop: 14 }}>{panel(mine, true)}{panel(partner, false)}</div>
-
-      <button className="think" onClick={think}>Pienso en ti<span>Un toque enciende su faro</span></button>
 
       {askNotify && (
         <div className="card">
           {iOSNeedsInstall() ? (
-            <p className="muted">En iPhone: comparte → <strong>Añadir a pantalla de inicio</strong> y luego activa avisos, para que “Pienso en ti” te llegue como notificación.</p>
+            <p className="muted">En iPhone los avisos salen si añades Faro a la pantalla de inicio: compartir → <strong>Añadir a pantalla de inicio</strong>. Luego ábrelo desde el icono y permite notificaciones.</p>
+          ) : notifyBlocked ? (
+            <p className="muted">El navegador bloqueó los avisos. Toca el candado junto a la dirección y permite notificaciones para este sitio.</p>
           ) : (
             <>
-              <p className="muted">Activa avisos para que te llegue una notificación cuando tu pareja piense en ti.</p>
-              <button className="btn" style={{ marginTop: 12 }} onClick={async () => {
-                const perm = await enablePingNotices(me);
-                setAskNotify(perm !== 'granted');
-              }}>Activar notificaciones</button>
+              <p className="muted">Faro necesita permiso del teléfono para avisarte cuando tu pareja piense en ti.</p>
+              <button className="btn" style={{ marginTop: 12 }} onClick={askPhonePermission}>Permitir avisos</button>
             </>
           )}
         </div>
       )}
 
+      <div className="sky" style={{ marginTop: 14 }}>{panel(mine, true)}{panel(partner, false)}</div>
+
+      <button className="think" onClick={think}>Pienso en ti<span>Un toque enciende su faro</span></button>
+
       {!partner && (
         <div className="card">
-          <p className="muted">Aún falta tu pareja. Comparte tu código desde la pantalla de inicio, o pídeselo.</p>
+          <p className="muted">Aún falta tu pareja. Comparte el código de abajo.</p>
         </div>
       )}
+
+      <div className="card">
+        <p className="muted" style={{ margin: 0 }}>Código de la pareja</p>
+        {code ? <div className="code" style={{ fontSize: 28, letterSpacing: 6, padding: 12 }}>{code}</div> : <p className="muted">…</p>}
+        {!switchDevice ? (
+          <button className="btn ghost" style={{ marginTop: 14 }} onClick={() => setSwitchDevice(true)}>
+            Entrar desde otro dispositivo
+          </button>
+        ) : (
+          <>
+            <p className="muted" style={{ marginTop: 14 }}>
+              En el otro aparato abre Faro → <strong>Entrar en este dispositivo</strong> → código <strong>{code}</strong> → tu nombre <strong>{me.name}</strong>.
+              Ese aparato toma tu asiento. Este se desconecta.
+            </p>
+            <button className="btn" style={{ marginTop: 14 }} disabled={leaving} onClick={async () => {
+              setLeaving(true);
+              await leaveThisDevice();
+            }}>{leaving ? '…' : 'Salir de este aparato'}</button>
+            <button className="btn ghost" style={{ marginTop: 10 }} onClick={() => setSwitchDevice(false)}>Seguir aquí</button>
+          </>
+        )}
+      </div>
 
       {activeGames.filter((g) => g.state?.first && g.state.first !== me.id).map((g) => {
         const meta = GAME_META[g.type];

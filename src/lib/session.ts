@@ -16,7 +16,19 @@ export function authErrorMessage(error: unknown): string {
   if (raw === 'no autenticado') {
     return 'No hay sesión. Recarga la página o activa Anonymous sign-ins en Supabase.';
   }
+  if (raw === 'nombre_vacio') return 'Escribe tu nombre.';
   return raw || 'Error de autenticación';
+}
+
+const NAME_KEY = 'faro-name';
+
+export function rememberName(name: string) {
+  const trimmed = name.trim();
+  if (trimmed) localStorage.setItem(NAME_KEY, trimmed);
+}
+
+export function rememberedName() {
+  return localStorage.getItem(NAME_KEY) ?? '';
 }
 
 export async function ensureAuth(): Promise<string> {
@@ -34,6 +46,11 @@ export async function getMyMember(): Promise<Member | null> {
   return (data as Member) ?? null;
 }
 
+export async function getCoupleCode(coupleId: string): Promise<string | null> {
+  const { data } = await supabase.from('couples').select('code').eq('id', coupleId).maybeSingle();
+  return (data as { code?: string } | null)?.code ?? null;
+}
+
 export async function touchLastSeen() {
   const { data: u } = await supabase.auth.getUser();
   if (!u.user) return;
@@ -43,6 +60,13 @@ export async function touchLastSeen() {
     city: place.city,
     timezone: place.timezone,
   }).eq('id', u.user.id);
+}
+
+/** Cierra la sesión de este aparato. El asiento sigue tuyo hasta que entres en el otro con el mismo nombre. */
+export async function leaveThisDevice() {
+  await supabase.auth.signOut();
+  window.location.hash = '#/home';
+  window.location.reload();
 }
 
 export { tz } from './place';
