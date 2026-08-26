@@ -65,6 +65,23 @@ create table if not exists chat_messages (
 create index if not exists chat_messages_couple_idx on chat_messages(couple_id, created_at);
 alter table chat_messages replica identity full;
 
+create table if not exists looks (
+  id           uuid primary key default gen_random_uuid(),
+  couple_id    uuid not null references couples(id) on delete cascade,
+  designer_id  uuid not null,
+  title        text not null default '',
+  outfit       jsonb not null,
+  rating       smallint,
+  note         text not null default '',
+  status       text not null default 'sent',
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now(),
+  check (rating is null or (rating >= 1 and rating <= 10)),
+  check (status in ('sent', 'rated'))
+);
+create index if not exists looks_couple_idx on looks(couple_id, created_at desc);
+alter table looks replica identity full;
+
 -- 2) HELPER: mi couple_id (SECURITY DEFINER evita recursión en RLS)
 create or replace function my_couple_id()
 returns uuid language sql stable security definer set search_path = public as $$
@@ -124,6 +141,7 @@ begin
     update pings set from_id = auth.uid() where from_id = v_old;
     update daily_answers set member_id = auth.uid() where member_id = v_old;
     update chat_messages set from_id = auth.uid() where from_id = v_old;
+    update looks set designer_id = auth.uid() where designer_id = v_old;
     update games
       set turn = case when turn = v_old then auth.uid() else turn end,
           winner = case when winner = v_old then auth.uid() else winner end,
@@ -150,6 +168,7 @@ alter table pings         enable row level security;
 alter table daily_answers enable row level security;
 alter table games         enable row level security;
 alter table chat_messages enable row level security;
+alter table looks         enable row level security;
 
 -- couples: solo la mía
 drop policy if exists couples_select on couples;
@@ -183,6 +202,13 @@ create policy chat_insert on chat_messages for insert with check (couple_id = my
 drop policy if exists chat_delete on chat_messages;
 create policy chat_delete on chat_messages for delete using (couple_id = my_couple_id());
 
+drop policy if exists looks_select on looks;
+create policy looks_select on looks for select using (couple_id = my_couple_id());
+drop policy if exists looks_insert on looks;
+create policy looks_insert on looks for insert with check (couple_id = my_couple_id() and designer_id = auth.uid());
+drop policy if exists looks_update on looks;
+create policy looks_update on looks for update using (couple_id = my_couple_id()) with check (couple_id = my_couple_id());
+
 -- games: leer/crear/actualizar dentro de mi pareja
 drop policy if exists games_select on games;
 create policy games_select on games for select using (couple_id = my_couple_id());
@@ -210,3 +236,4 @@ alter publication supabase_realtime add table games;
 alter publication supabase_realtime add table daily_answers;
 alter publication supabase_realtime add table members;
 alter publication supabase_realtime add table chat_messages;
+alter publication supabase_realtime add table looks;

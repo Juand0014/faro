@@ -151,3 +151,27 @@ label{display:block;font-size:13px;color:var(--lo);margin-top:14px}
 .sea-cell.hit{background:radial-gradient(circle,#ff8a9b,#a72448);border-color:#ff8a9b}
 .sea-cell.miss{color:#9bd7ef;background:#143b57}
 .sea-cell:disabled{cursor:default}
+
+.look-stage{margin:12px 0;padding:8px 8px 0;border-radius:24px;border:1px solid var(--line);
+  background:radial-gradient(80% 60% at 50% 0%,rgba(242,179,87,.16),transparent 60%),#0e1122}
+.look-fig{display:block;width:min(260px,70%);height:auto;margin:0 auto}
+.look-fig.compact{width:100%;max-height:180px}
+.look-tabs,.look-choices{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.look-tabs button,.look-choices button{border:1px solid var(--line);background:#0e1122;color:var(--hi);
+  border-radius:999px;padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer}
+.look-tabs button.on,.look-choices button.on{border-color:rgba(242,179,87,.55);color:var(--gold)}
+.look-swatches{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.look-swatches button{width:32px;height:32px;border-radius:50%;border:3px solid transparent;cursor:pointer}
+.look-swatches button.on{border-color:var(--gold);box-shadow:0 0 0 2px var(--void)}
+.look-h{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--lo);margin:22px 0 10px}
+.look-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.look-card{display:flex;flex-direction:column;gap:6px;padding:10px;border-radius:18px;border:1px solid var(--line);
+  background:#0e1122;color:inherit;text-align:left;cursor:pointer;font:inherit}
+.look-card.wait{cursor:default;opacity:.85}
+.look-card span{font-weight:700;font-size:13px}
+.look-card b{color:var(--gold);font-size:14px}
+.look-card em{font-size:12px;color:var(--lo);font-style:italic}
+.look-scores{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:14px 0}
+.look-scores button{aspect-ratio:1;border-radius:14px;border:1px solid var(--line);background:#0e1122;
+  color:var(--gold);font-weight:800;font-size:16px;cursor:pointer}
+.look-back{background:none;border:none;padding:0;font:inherit;cursor:pointer;text-align:left}

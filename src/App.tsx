@@ -14,6 +14,7 @@ import Stop from './games/Stop';
 import Hangman from './games/Hangman';
 import Pictionary from './games/Pictionary';
 import Battleship from './games/Battleship';
+import Fashion, { useLooksInbox } from './games/Fashion';
 import Nav from './components/Nav';
 import RematchOverlay from './components/RematchOverlay';
 import { useActiveGames } from './lib/useActiveGames';
@@ -104,6 +105,7 @@ export default function App() {
 function AppShell({ member, partnerId, route }: { member: Member; partnerId: string | null; route: string }) {
   const { active, rematches } = useActiveGames(member.couple_id);
   const chatUnread = useChatUnread(member.couple_id, member.id, route.startsWith('/chat'));
+  const looksWaiting = useLooksInbox(member.couple_id, member.id);
   const [invite, setInvite] = useState<GameRow | null>(null);
   const [rejectedMsg, setRejectedMsg] = useState('');
   const incoming = rematches.filter((g) => g.state?.rematch?.status === 'pending' && g.state.rematch.from !== member.id);
@@ -136,12 +138,13 @@ function AppShell({ member, partnerId, route }: { member: Member; partnerId: str
   else if (route.startsWith('/game/hang')) screen = <Hangman me={member} partnerId={partnerId} />;
   else if (route.startsWith('/game/draw')) screen = <Pictionary me={member} partnerId={partnerId} />;
   else if (route.startsWith('/game/ships')) screen = <Battleship me={member} partnerId={partnerId} />;
+  else if (route.startsWith('/game/look')) screen = <Fashion me={member} />;
   else screen = <Home me={member} activeGames={active} rematches={rematches} />;
 
   return (
     <>
       {screen}
-      <Nav route={route} live={active.length > 0 || incoming.length > 0} chatUnread={chatUnread} />
+      <Nav route={route} live={active.length > 0 || incoming.length > 0 || looksWaiting > 0} chatUnread={chatUnread} />
       {invite && <RematchOverlay me={member} game={invite} onClose={() => setInvite(null)} />}
       {rejectedMsg && (
         <div style={{ position: 'fixed', bottom: 92, left: 0, right: 0, textAlign: 'center', zIndex: 80 }}>
