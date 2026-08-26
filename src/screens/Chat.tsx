@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Member } from '../lib/session';
 import { chatCutoff } from '../lib/clock';
+import { notifyChat } from '../lib/notify';
 
 export type ChatMsg = { id: number; from_id: string; body: string; created_at: string };
 
@@ -87,6 +88,8 @@ export default function Chat({ me }: { me: Member }) {
     if (error) {
       setDraft(body);
       setErr('No se pudo enviar. Intenta de nuevo.');
+    } else {
+      notifyChat(body);
     }
     setBusy(false);
   }

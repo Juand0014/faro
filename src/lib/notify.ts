@@ -31,14 +31,14 @@ function toBytes(base64: string) {
   return Uint8Array.from(raw, (c) => c.charCodeAt(0));
 }
 
-function noticeOptions(body: string, tag: string): NotificationOptions {
+function noticeOptions(body: string, tag: string, url = './#/home'): NotificationOptions {
   return {
     body,
     icon: ICON,
     badge: ICON,
     tag,
     renotify: true,
-    data: { url: './#/home' },
+    data: { url },
   } as NotificationOptions;
 }
 
@@ -47,9 +47,9 @@ export function pingCopy(name?: string | null) {
   return { title: 'Desde faro', body: `${who} piensa en ti` };
 }
 
-export async function showPingNotice(body: string, tag = 'faro-ping', title = 'Desde faro') {
+export async function showPingNotice(body: string, tag = 'faro-ping', title = 'Desde faro', url = './#/home') {
   if (!canNotify() || Notification.permission !== 'granted') return false;
-  const opts = noticeOptions(body, tag);
+  const opts = noticeOptions(body, tag, url);
   try {
     const reg = await Promise.race([
       navigator.serviceWorker.ready,
@@ -97,4 +97,12 @@ export async function enablePingNotices(me: { id: string; couple_id: string }) {
 
 export async function notifyPartner() {
   try { await supabase.functions.invoke('notify-ping'); } catch { /* aviso local si la pestaña está abierta */ }
+}
+
+export async function notifyChat(text: string) {
+  const body = text.trim().slice(0, 280);
+  if (!body) return;
+  try {
+    await supabase.functions.invoke('notify-ping', { body: { type: 'chat', text: body } });
+  } catch { /* el otro aparato lo ve por realtime si está abierto */ }
 }

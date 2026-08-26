@@ -22,58 +22,56 @@ Deno.serve(async (req) => {
   const vapidPriv = Deno.env.get("VAPID_PRIVATE_KEY");
   if (!vapidPub || !vapidPriv) return json({ error: "vapid missing" }, 500);
 
-  const token = (req.headers.get("Authorization") || "").replace(
-    /^Bearer\s+/i,
-    "",
-  );
+  const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
   const admin = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
-  const {
-    data: { user },
-    error,
-  } = await admin.auth.getUser(token);
+  const { data: { user }, error } = await admin.auth.getUser(token);
   if (error || !user) return json({ error: "no auth" }, 401);
 
-  webpush.setVapidDetails(
-    "mailto:faro@users.noreply.github.com",
-    vapidPub,
-    vapidPriv,
-  );
+  webpush.setVapidDetails("mailto:faro@users.noreply.github.com", vapidPub, vapidPriv);
 
-  const { data: me } = await admin
-    .from("members")
-    .select("couple_id,name")
-    .eq("id", user.id)
-    .maybeSingle();
+  const { data: me } = await admin.from("members").select("couple_id,name").eq("id", user.id).maybeSingle();
   if (!me) return json({ error: "no member" }, 400);
 
-  const { data: subs } = await admin
-    .from("push_subs")
+  let kind = "ping";
+  let chatText = "";
+  try {
+    const sent = await req.json();
+    if (sent && sent.type === "chat" && typeof sent.text === "string") {
+      kind = "chat";
+      chatText = sent.text.trim().slice(0, 280);
+    }
+  } catch {
+    // ping without body
+  }
+  if (kind === "chat" && !chatText) return json({ error: "empty" }, 400);
+
+  const { data: subs } = await admin.from("push_subs")
     .select("endpoint,p256dh,auth")
     .eq("couple_id", me.couple_id)
     .neq("user_id", user.id);
 
-  const payload = JSON.stringify({
-    title: "Desde faro",
-    body: `${me.name || "Tu pareja"} piensa en ti`,
-  });
+  const who = me.name || "Tu pareja";
+  const payload = JSON.stringify(kind === "chat"
+    ? { title: "Desde faro · " + who, body: chatText, tag: "faro-chat", url: "./#/chat" }
+    : { title: "Desde faro", body: who + " piensa en ti", tag: "faro-ping", url: "./#/home" });
 
-  let sent = 0;
-  for (const s of subs ?? []) {
+  let sentCount = 0;
+  for (const s of subs || []) {
     try {
       await webpush.sendNotification(
         { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
         payload,
-        { TTL: 86400, urgency: "high", payload: { action: "ping" } },
+        { TTL: 86400, urgency: "high" },
       );
-      sent += 1;
+      sentCount += 1;
     } catch (err: any) {
-      if (err?.statusCode === 404 || err?.statusCode === 410) {
+      if (err && (err.statusCode === 404 || err.statusCode === 410)) {
         await admin.from("push_subs").delete().eq("endpoint", s.endpoint);
       }
     }
   }
-  return json({ sent });
+  return json({ sent: sentCount });
 });

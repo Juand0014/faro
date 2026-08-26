@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './supabase';
 import { chatCutoff } from './clock';
+import { showPingNotice } from './notify';
 
 export function useChatUnread(coupleId: string, myId: string, onChat: boolean) {
   const [unread, setUnread] = useState(false);
@@ -8,9 +9,13 @@ export function useChatUnread(coupleId: string, myId: string, onChat: boolean) {
   useEffect(() => {
     if (onChat) { setUnread(false); return; }
     let alive = true;
+    const names = new Map<string, string>();
 
     async function check() {
-      const { data: people } = await supabase.from('members').select('timezone').eq('couple_id', coupleId);
+      const { data: people } = await supabase.from('members').select('id,name,timezone').eq('couple_id', coupleId);
+      for (const m of (people as { id: string; name: string; timezone: string }[]) ?? []) {
+        names.set(m.id, m.name);
+      }
       const zones = ((people as { timezone: string }[]) ?? []).map((m) => m.timezone);
       const cutoff = chatCutoff(zones.length ? zones : ['UTC']);
       const seen = Number(localStorage.getItem(`faro-chat-seen:${coupleId}`) || 0);
@@ -27,8 +32,13 @@ export function useChatUnread(coupleId: string, myId: string, onChat: boolean) {
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${coupleId}` },
         (payload) => {
-          const row = payload.new as { from_id?: string };
-          if (row?.from_id && row.from_id !== myId) setUnread(true);
+          const row = payload.new as { from_id?: string; body?: string };
+          if (!row?.from_id || row.from_id === myId) return;
+          setUnread(true);
+          if (document.visibilityState !== 'visible') return;
+          const who = names.get(row.from_id) || 'Tu pareja';
+          navigator.vibrate?.(200);
+          showPingNotice(row.body || '', 'faro-chat', `Desde faro · ${who}`, './#/chat');
         })
       .subscribe();
     return () => { alive = false; supabase.removeChannel(channel); };
