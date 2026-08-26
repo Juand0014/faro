@@ -7,6 +7,8 @@ export const GAME_META: Record<string, { name: string; href: string; icon: strin
   c4: { name: '4 en línea', href: '#/game/c4', icon: '🔴' },
   stop: { name: 'Stop', href: '#/game/stop', icon: '✏️' },
   hang: { name: 'Ahorcado', href: '#/game/hang', icon: '🪢' },
+  draw: { name: 'Pictionary', href: '#/game/draw', icon: '🎨' },
+  ships: { name: 'Batalla naval', href: '#/game/ships', icon: '🚢' },
 };
 
 export function useCoupleGames(coupleId: string) {

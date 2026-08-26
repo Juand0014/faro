@@ -11,6 +11,8 @@ import TicTacToe from './games/TicTacToe';
 import ConnectFour from './games/ConnectFour';
 import Stop from './games/Stop';
 import Hangman from './games/Hangman';
+import Pictionary from './games/Pictionary';
+import Battleship from './games/Battleship';
 import Nav from './components/Nav';
 import RematchOverlay from './components/RematchOverlay';
 import { useActiveGames } from './lib/useActiveGames';
@@ -128,6 +130,8 @@ function AppShell({ member, partnerId, route }: { member: Member; partnerId: str
   else if (route.startsWith('/game/c4')) screen = <ConnectFour me={member} partnerId={partnerId} />;
   else if (route.startsWith('/game/stop')) screen = <Stop me={member} partnerId={partnerId} />;
   else if (route.startsWith('/game/hang')) screen = <Hangman me={member} partnerId={partnerId} />;
+  else if (route.startsWith('/game/draw')) screen = <Pictionary me={member} partnerId={partnerId} />;
+  else if (route.startsWith('/game/ships')) screen = <Battleship me={member} partnerId={partnerId} />;
   else screen = <Home me={member} activeGames={active} rematches={rematches} />;
 
   return (

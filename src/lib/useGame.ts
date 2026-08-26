@@ -4,6 +4,8 @@ import type { Member } from './session';
 import { broadcastRematch, subscribeRematch } from './coupleLive';
 import { initialStopState } from './stop';
 import { initialHangState } from './hangman';
+import { initialPictionaryState } from './pictionary';
+import { initialBattleshipState } from './battleship';
 
 export type Rematch = { from: string; status: 'pending' | 'accepted' | 'rejected' };
 
@@ -23,6 +25,8 @@ export function freshState(type: string, first: string, prev?: any) {
   if (type === 'c4') return { board: Array(42).fill(''), first };
   if (type === 'stop') return initialStopState(first, prev?.config);
   if (type === 'hang') return initialHangState(first, prev);
+  if (type === 'draw') return initialPictionaryState(first, prev);
+  if (type === 'ships') return initialBattleshipState(first);
   return { board: Array(9).fill(''), first };
 }
 
@@ -54,7 +58,10 @@ export async function startAcceptedGame(game: GameRow) {
   const first = game.state?.rematch?.from || game.state?.first;
   await saveState(game, { from: first, status: 'accepted' });
   const state = freshState(game.type, first, game.state);
-  const turn = game.type === 'stop' ? null : game.type === 'hang' ? (state as { setter: string }).setter : first;
+  const turn = game.type === 'stop' ? null
+    : game.type === 'hang' ? (state as { setter: string }).setter
+      : game.type === 'draw' ? (state as { drawer: string }).drawer
+        : first;
   const { data, error } = await supabase.from('games')
     .insert({ couple_id: game.couple_id, type: game.type, state, turn, status: 'active' })
     .select().single();
@@ -182,9 +189,12 @@ export function useGame(type: string, me: Member, initial: () => any) {
 
   const applyMove = useCallback(async (patch: Partial<GameRow>) => {
     if (!game) return;
-    const state = { ...(patch.state ?? game.state) };
-    delete state.rematch;
-    const next = { ...patch, state, updated_at: new Date().toISOString() };
+    const next: Partial<GameRow> = { ...patch, updated_at: new Date().toISOString() };
+    if (patch.state !== undefined) {
+      const state = { ...patch.state };
+      delete state.rematch;
+      next.state = state;
+    }
     setGame({ ...game, ...(next as any) });
     await supabase.from('games').update(next).eq('id', game.id);
   }, [game]);
@@ -202,12 +212,12 @@ export function useGame(type: string, me: Member, initial: () => any) {
     setGame({ ...current, status: 'abandoned', state: stopped });
     if (mode === 'exit') return;
 
-    const state = freshState(type, me.id);
+    const state = initial();
     const { data } = await supabase.from('games')
       .insert({ couple_id: me.couple_id, type, state, turn: type === 'stop' ? null : me.id, status: 'active' })
       .select().single();
     if (data) setGame(data as GameRow);
-  }, [me.couple_id, me.id, type]);
+  }, [initial, me.couple_id, me.id, type]);
 
   const askRematch = useCallback(async () => {
     const current = gameRef.current;
@@ -233,7 +243,7 @@ export function useGame(type: string, me: Member, initial: () => any) {
       setGame(started);
       await broadcastRematch({ game: started, rematch: { from: current.state?.rematch?.from || me.id, status: 'accepted' } });
     }
-  }, []);
+  }, [me.id]);
 
   const rejectRematch = useCallback(async () => {
     const current = gameRef.current;
@@ -245,5 +255,8 @@ export function useGame(type: string, me: Member, initial: () => any) {
     if (from) await broadcastRematch({ game: next, rematch: { from, status: 'rejected' } });
   }, []);
 
-  return { game, loading, newGame, applyMove, askRematch, acceptRematch, rejectRematch, stopMatch, reload: loadLatest, notice };
+  return {
+    game, loading, newGame, applyMove,
+    askRematch, acceptRematch, rejectRematch, stopMatch, reload: loadLatest, notice,
+  };
 }

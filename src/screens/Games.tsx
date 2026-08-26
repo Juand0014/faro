@@ -6,6 +6,8 @@ const list = [
   { href: '/game/c4', type: 'c4', icon: '🔴', name: '4 en línea', desc: 'Conecta cuatro antes que tu pareja.' },
   { href: '/game/stop', type: 'stop', icon: '✏️', name: 'Stop', desc: 'Una letra, muchas categorías. El primero en Stop cierra.' },
   { href: '/game/hang', type: 'hang', icon: '🪢', name: 'Ahorcado', desc: 'Uno piensa la palabra, el otro adivina.' },
+  { href: '/game/draw', type: 'draw', icon: '🎨', name: 'Pictionary', desc: 'Dibuja la palabra para que tu pareja la adivine.' },
+  { href: '/game/ships', type: 'ships', icon: '🚢', name: 'Batalla naval', desc: 'Prepara tu flota y hunde la de tu pareja.' },
 ];
 
 export default function Games({ me, active, rematches }: { me: Member; active: GameRow[]; rematches: GameRow[] }) {
