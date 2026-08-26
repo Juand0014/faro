@@ -1,4 +1,4 @@
-const CACHE = 'faro-v7';
+const CACHE = 'faro-v8';
 self.addEventListener('install', (e) => { self.skipWaiting(); });
 self.addEventListener('activate', (e) => {
   e.waitUntil((async () => {
@@ -24,10 +24,10 @@ self.addEventListener('fetch', (e) => {
 });
 
 self.addEventListener('push', (e) => {
-  let data = { title: 'Faro', body: '💛 Está pensando en ti' };
+  let data = { title: 'Desde faro', body: 'Tu pareja piensa en ti' };
   try { if (e.data) data = { ...data, ...e.data.json() }; } catch { /* keep default */ }
-  e.waitUntil(self.registration.showNotification(data.title || 'Faro', {
-    body: data.body || '💛 Está pensando en ti',
+  e.waitUntil(self.registration.showNotification(data.title || 'Desde faro', {
+    body: data.body || 'Tu pareja piensa en ti',
     icon: './icon-192.png',
     badge: './icon-192.png',
     tag: 'faro-ping',

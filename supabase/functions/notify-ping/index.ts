@@ -37,8 +37,8 @@ Deno.serve(async (req) => {
     .neq('user_id', user.id);
 
   const payload = JSON.stringify({
-    title: 'Faro',
-    body: `${me.name || 'Tu pareja'} está pensando en ti 💛`,
+    title: 'Desde faro',
+    body: `${me.name || 'Tu pareja'} piensa en ti`,
   });
 
   let sent = 0;

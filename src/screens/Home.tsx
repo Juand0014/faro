@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { getCoupleCode, leaveThisDevice, type Member } from '../lib/session';
 import { localTime, dayStatus, STATUS_ES } from '../lib/clock';
 import { prettyPlace } from '../lib/place';
 import { GAME_META } from '../lib/useActiveGames';
 import { rejectRematchOn, rematchOf, startAcceptedGame, type GameRow } from '../lib/useGame';
-import { canNotify, enablePingNotices, iOSNeedsInstall, notifyPartner, notifySupported, showPingNotice } from '../lib/notify';
+import { canNotify, enablePingNotices, iOSNeedsInstall, notifyPartner, notifySupported, pingCopy, showPingNotice } from '../lib/notify';
 
 export default function Home({ me, activeGames, rematches }: { me: Member; activeGames: GameRow[]; rematches: GameRow[] }) {
   const [members, setMembers] = useState<Member[]>([]);
@@ -43,16 +43,21 @@ export default function Home({ me, activeGames, rematches }: { me: Member; activ
     }
   }, [me.id, me.couple_id]);
 
+  const membersRef = useRef(members);
+  membersRef.current = members;
+
   useEffect(() => {
     // pings entrantes
     const pingCh = supabase.channel('pings')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'pings', filter: `couple_id=eq.${me.couple_id}` },
         (p: any) => {
           if (p.new.from_id === me.id) return;
+          const who = membersRef.current.find((m) => m.id === p.new.from_id)?.name;
+          const notice = pingCopy(who);
           setBeacon(true);
-          setFlash('💛 Está pensando en ti');
+          setFlash(`${notice.title} - ${notice.body}`);
           navigator.vibrate?.(200);
-          showPingNotice('💛 Está pensando en ti');
+          showPingNotice(notice.body, 'faro-ping', notice.title);
           setTimeout(() => setBeacon(false), 900);
           setTimeout(() => setFlash(null), 3000);
         })
@@ -70,7 +75,8 @@ export default function Home({ me, activeGames, rematches }: { me: Member; activ
     if (perm === 'granted') {
       setAskNotify(false);
       setNotifyBlocked(false);
-      await showPingNotice('Así te va a llegar cuando piense en ti 💛', 'faro-on');
+      const notice = pingCopy(membersRef.current.find((m) => m.id !== me.id)?.name);
+      await showPingNotice(notice.body, 'faro-on', notice.title);
       return true;
     }
     setAskNotify(true);

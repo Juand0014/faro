@@ -42,7 +42,12 @@ function noticeOptions(body: string, tag: string): NotificationOptions {
   } as NotificationOptions;
 }
 
-export async function showPingNotice(body = '💛 Está pensando en ti', tag = 'faro-ping') {
+export function pingCopy(name?: string | null) {
+  const who = (name || '').trim() || 'Tu pareja';
+  return { title: 'Desde faro', body: `${who} piensa en ti` };
+}
+
+export async function showPingNotice(body: string, tag = 'faro-ping', title = 'Desde faro') {
   if (!canNotify() || Notification.permission !== 'granted') return false;
   const opts = noticeOptions(body, tag);
   try {
@@ -50,11 +55,11 @@ export async function showPingNotice(body = '💛 Está pensando en ti', tag = '
       navigator.serviceWorker.ready,
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error('sw')), 2500)),
     ]);
-    await reg.showNotification('Faro', opts);
+    await reg.showNotification(title, opts);
     return true;
   } catch {
     try {
-      new Notification('Faro', { body, icon: ICON, tag });
+      new Notification(title, { body, icon: ICON, tag });
       return true;
     } catch {
       return false;
