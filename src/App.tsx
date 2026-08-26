@@ -6,6 +6,7 @@ import { useHashRoute } from './lib/router';
 import Pair from './screens/Pair';
 import Home from './screens/Home';
 import Questions from './screens/Questions';
+import Chat from './screens/Chat';
 import Games from './screens/Games';
 import TicTacToe from './games/TicTacToe';
 import ConnectFour from './games/ConnectFour';
@@ -16,6 +17,7 @@ import Battleship from './games/Battleship';
 import Nav from './components/Nav';
 import RematchOverlay from './components/RematchOverlay';
 import { useActiveGames } from './lib/useActiveGames';
+import { useChatUnread } from './lib/useChatUnread';
 import { connectCoupleLive, subscribeRematch } from './lib/coupleLive';
 import type { GameRow } from './lib/useGame';
 
@@ -101,6 +103,7 @@ export default function App() {
 
 function AppShell({ member, partnerId, route }: { member: Member; partnerId: string | null; route: string }) {
   const { active, rematches } = useActiveGames(member.couple_id);
+  const chatUnread = useChatUnread(member.couple_id, member.id, route.startsWith('/chat'));
   const [invite, setInvite] = useState<GameRow | null>(null);
   const [rejectedMsg, setRejectedMsg] = useState('');
   const incoming = rematches.filter((g) => g.state?.rematch?.status === 'pending' && g.state.rematch.from !== member.id);
@@ -124,7 +127,8 @@ function AppShell({ member, partnerId, route }: { member: Member; partnerId: str
   }, [incoming[0]?.id]);
 
   let screen;
-  if (route.startsWith('/questions')) screen = <Questions me={member} />;
+  if (route.startsWith('/chat')) screen = <Chat me={member} />;
+  else if (route.startsWith('/questions')) screen = <Questions me={member} />;
   else if (route === '/games') screen = <Games me={member} active={active} rematches={rematches} />;
   else if (route.startsWith('/game/ttt')) screen = <TicTacToe me={member} partnerId={partnerId} />;
   else if (route.startsWith('/game/c4')) screen = <ConnectFour me={member} partnerId={partnerId} />;
@@ -137,7 +141,7 @@ function AppShell({ member, partnerId, route }: { member: Member; partnerId: str
   return (
     <>
       {screen}
-      <Nav route={route} live={active.length > 0 || incoming.length > 0} />
+      <Nav route={route} live={active.length > 0 || incoming.length > 0} chatUnread={chatUnread} />
       {invite && <RematchOverlay me={member} game={invite} onClose={() => setInvite(null)} />}
       {rejectedMsg && (
         <div style={{ position: 'fixed', bottom: 92, left: 0, right: 0, textAlign: 'center', zIndex: 80 }}>

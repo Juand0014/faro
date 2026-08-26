@@ -55,6 +55,16 @@ create index if not exists games_couple_type_idx on games(couple_id, type);
 create unique index if not exists games_one_active_per_type on games (couple_id, type) where status = 'active';
 alter table games replica identity full;
 
+create table if not exists chat_messages (
+  id         bigint generated always as identity primary key,
+  couple_id  uuid not null references couples(id) on delete cascade,
+  from_id    uuid not null,
+  body       text not null check (char_length(body) between 1 and 280),
+  created_at timestamptz not null default now()
+);
+create index if not exists chat_messages_couple_idx on chat_messages(couple_id, created_at);
+alter table chat_messages replica identity full;
+
 -- 2) HELPER: mi couple_id (SECURITY DEFINER evita recursión en RLS)
 create or replace function my_couple_id()
 returns uuid language sql stable security definer set search_path = public as $$
@@ -113,6 +123,7 @@ begin
   if v_old is not null then
     update pings set from_id = auth.uid() where from_id = v_old;
     update daily_answers set member_id = auth.uid() where member_id = v_old;
+    update chat_messages set from_id = auth.uid() where from_id = v_old;
     update games
       set turn = case when turn = v_old then auth.uid() else turn end,
           winner = case when winner = v_old then auth.uid() else winner end,
@@ -138,6 +149,7 @@ alter table members       enable row level security;
 alter table pings         enable row level security;
 alter table daily_answers enable row level security;
 alter table games         enable row level security;
+alter table chat_messages enable row level security;
 
 -- couples: solo la mía
 drop policy if exists couples_select on couples;
@@ -162,6 +174,14 @@ drop policy if exists answers_insert on daily_answers;
 create policy answers_insert on daily_answers for insert with check (couple_id = my_couple_id() and member_id = auth.uid());
 drop policy if exists answers_update on daily_answers;
 create policy answers_update on daily_answers for update using (member_id = auth.uid()) with check (member_id = auth.uid());
+
+-- chat: leer/escribir/borrar (la limpieza nocturna) dentro de mi pareja
+drop policy if exists chat_select on chat_messages;
+create policy chat_select on chat_messages for select using (couple_id = my_couple_id());
+drop policy if exists chat_insert on chat_messages;
+create policy chat_insert on chat_messages for insert with check (couple_id = my_couple_id() and from_id = auth.uid());
+drop policy if exists chat_delete on chat_messages;
+create policy chat_delete on chat_messages for delete using (couple_id = my_couple_id());
 
 -- games: leer/crear/actualizar dentro de mi pareja
 drop policy if exists games_select on games;
@@ -189,3 +209,4 @@ alter publication supabase_realtime add table pings;
 alter publication supabase_realtime add table games;
 alter publication supabase_realtime add table daily_answers;
 alter publication supabase_realtime add table members;
+alter publication supabase_realtime add table chat_messages;

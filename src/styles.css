@@ -114,6 +114,20 @@ label{display:block;font-size:13px;color:var(--lo);margin-top:14px}
 .hang-key.hit{border-color:rgba(61,220,132,.4);color:#3ddc84}
 .hang-key.miss{border-color:rgba(255,138,155,.35);color:#ff8a9b}
 
+.chat-wrap{display:flex;flex-direction:column}
+.chat-log{flex:1;display:flex;flex-direction:column;gap:8px;margin-top:12px;
+  min-height:42vh;max-height:calc(100dvh - 280px);overflow:auto;padding-right:2px}
+.bubble{max-width:82%;padding:10px 12px;border-radius:16px;font-size:15px;line-height:1.35;
+  border:1px solid var(--line);background:#0e1122}
+.bubble.me{margin-left:auto;background:linear-gradient(180deg,rgba(210,79,118,.22),rgba(14,17,32,.9));
+  border-color:rgba(210,79,118,.35)}
+.bubble.you{margin-right:auto;background:linear-gradient(180deg,rgba(44,109,128,.22),rgba(14,17,32,.9));
+  border-color:rgba(44,109,128,.35)}
+.bubble-who{font-size:11px;color:var(--dim);margin-bottom:4px;font-weight:600}
+.chat-composer{display:flex;gap:8px;align-items:flex-end;margin-top:12px}
+.chat-composer .input{margin-top:0}
+.chat-composer .btn{width:auto;padding:13px 16px;flex:0 0 auto}
+
 .draw-choices{display:grid;gap:8px;margin-top:12px}
 .draw-word{color:var(--gold);text-transform:uppercase}
 .draw-canvas{display:block;width:100%;aspect-ratio:10/7;margin-top:14px;background:#fff;
