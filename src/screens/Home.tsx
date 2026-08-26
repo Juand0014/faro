@@ -3,9 +3,9 @@ import { supabase } from '../lib/supabase';
 import type { Member } from '../lib/session';
 import { localTime, dayStatus, STATUS_ES } from '../lib/clock';
 import { GAME_META } from '../lib/useActiveGames';
-import type { GameRow } from '../lib/useGame';
+import { rejectRematchOn, rematchOf, startAcceptedGame, type GameRow } from '../lib/useGame';
 
-export default function Home({ me, activeGames }: { me: Member; activeGames: GameRow[] }) {
+export default function Home({ me, activeGames, rematches }: { me: Member; activeGames: GameRow[]; rematches: GameRow[] }) {
   const [members, setMembers] = useState<Member[]>([]);
   const [online, setOnline] = useState<Set<string>>(new Set());
   const [beacon, setBeacon] = useState(false);
@@ -77,6 +77,38 @@ export default function Home({ me, activeGames }: { me: Member; activeGames: Gam
             <div className="livepill">{meta.icon} Tu pareja empezó {meta.name}</div>
             <p className="muted" style={{ margin: '8px 0 0' }}>Entra a la misma partida →</p>
           </a>
+        );
+      })}
+
+      {rematches.map((g) => {
+        const meta = GAME_META[g.type];
+        const ask = rematchOf(g);
+        if (!meta || !ask) return null;
+        if (ask.status === 'rejected' && ask.from === me.id) {
+          return (
+            <div key={g.id} className="card">
+              <p className="err">{meta.icon} Tu pareja rechazó la revancha de {meta.name}</p>
+            </div>
+          );
+        }
+        if (ask.status !== 'pending') return null;
+        if (ask.from === me.id) {
+          return (
+            <div key={g.id} className="card">
+              <div className="livepill">{meta.icon} Esperando revancha de {meta.name}</div>
+              <p className="muted" style={{ margin: '8px 0 0' }}>Tu pareja aún no responde.</p>
+            </div>
+          );
+        }
+        return (
+          <div key={g.id} className="card">
+            <div className="livepill">{meta.icon} Tu pareja quiere revancha en {meta.name}</div>
+            <button className="btn" style={{ marginTop: 12 }} onClick={async () => {
+              const started = await startAcceptedGame(g);
+              if (started) window.location.hash = meta.href.slice(1);
+            }}>Aceptar</button>
+            <button className="btn ghost" style={{ marginTop: 10 }} onClick={() => rejectRematchOn(g)}>Rechazar</button>
+          </div>
         );
       })}
 

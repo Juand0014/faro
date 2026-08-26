@@ -75,13 +75,14 @@ export default function App() {
 }
 
 function AppShell({ member, partnerId, route }: { member: Member; partnerId: string | null; route: string }) {
-  const activeGames = useActiveGames(member.couple_id);
+  const { active, rematches } = useActiveGames(member.couple_id);
+  const incoming = rematches.filter((g) => g.state?.rematch?.status === 'pending' && g.state.rematch.from !== member.id);
   let screen;
   if (route.startsWith('/questions')) screen = <Questions me={member} />;
-  else if (route === '/games') screen = <Games me={member} active={activeGames} />;
+  else if (route === '/games') screen = <Games me={member} active={active} rematches={rematches} />;
   else if (route.startsWith('/game/ttt')) screen = <TicTacToe me={member} partnerId={partnerId} />;
   else if (route.startsWith('/game/c4')) screen = <ConnectFour me={member} partnerId={partnerId} />;
-  else screen = <Home me={member} activeGames={activeGames} />;
+  else screen = <Home me={member} activeGames={active} rematches={rematches} />;
 
-  return (<>{screen}<Nav route={route} live={activeGames.length > 0} /></>);
+  return (<>{screen}<Nav route={route} live={active.length > 0 || incoming.length > 0} /></>);
 }

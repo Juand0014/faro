@@ -1,5 +1,6 @@
 import { useGame } from '../lib/useGame';
 import type { Member } from '../lib/session';
+import RematchPanel from '../components/RematchPanel';
 
 const ROWS = 6, COLS = 7;
 const empty = () => Array(ROWS * COLS).fill('');
@@ -20,7 +21,7 @@ function winner(b: string[]): string | null {
 }
 
 export default function ConnectFour({ me, partnerId }: { me: Member; partnerId: string | null }) {
-  const { game, loading, newGame, applyMove, notice } =
+  const { game, loading, newGame, applyMove, askRematch, acceptRematch, rejectRematch, notice } =
     useGame('c4', me, () => ({ board: empty(), first: me.id }));
 
   if (loading) return <div className="wrap"><p className="muted">Cargando…</p></div>;
@@ -76,9 +77,7 @@ export default function ConnectFour({ me, partnerId }: { me: Member; partnerId: 
           })
         )}
       </div>
-      {game.status !== 'active' && (
-        <button className="btn" style={{ marginTop: 16 }} onClick={() => newGame(me.id)}>Revancha</button>
-      )}
+      <RematchPanel me={me} game={game} onAsk={askRematch} onAccept={acceptRematch} onReject={rejectRematch} />
     </div>
   );
 }

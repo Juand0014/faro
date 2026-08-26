@@ -1,5 +1,6 @@
 import { useGame } from '../lib/useGame';
 import type { Member } from '../lib/session';
+import RematchPanel from '../components/RematchPanel';
 
 const LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
 function winner(b: string[]): string | null {
@@ -8,7 +9,7 @@ function winner(b: string[]): string | null {
 }
 
 export default function TicTacToe({ me, partnerId }: { me: Member; partnerId: string | null }) {
-  const { game, loading, newGame, applyMove, notice } =
+  const { game, loading, newGame, applyMove, askRematch, acceptRematch, rejectRematch, notice } =
     useGame('ttt', me, () => ({ board: Array(9).fill(''), first: me.id }));
 
   if (loading) return <div className="wrap"><p className="muted">Cargando…</p></div>;
@@ -59,9 +60,7 @@ export default function TicTacToe({ me, partnerId }: { me: Member; partnerId: st
           <button key={i} className={'cell ' + c} disabled={!mine || !!c} onClick={() => play(i)}>{c}</button>
         ))}
       </div>
-      {game.status !== 'active' && (
-        <button className="btn" style={{ marginTop: 16 }} onClick={() => newGame(me.id)}>Revancha</button>
-      )}
+      <RematchPanel me={me} game={game} onAsk={askRematch} onAccept={acceptRematch} onReject={rejectRematch} />
     </div>
   );
 }
