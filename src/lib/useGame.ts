@@ -6,6 +6,7 @@ import { initialStopState } from './stop';
 import { initialHangState } from './hangman';
 import { initialPictionaryState } from './pictionary';
 import { initialBattleshipState } from './battleship';
+import { initialWordSearchState } from './wordSearch';
 
 export type Rematch = { from: string; status: 'pending' | 'accepted' | 'rejected' };
 
@@ -27,6 +28,7 @@ export function freshState(type: string, first: string, prev?: any) {
   if (type === 'hang') return initialHangState(first, prev);
   if (type === 'draw') return initialPictionaryState(first, prev);
   if (type === 'ships') return initialBattleshipState(first);
+  if (type === 'wordsearch') return initialWordSearchState(first, prev?.nextCategory || prev?.category);
   return { board: Array(9).fill(''), first };
 }
 
@@ -48,8 +50,8 @@ function sameGame(a: GameRow | null, b: GameRow) {
     && a.updated_at === b.updated_at && JSON.stringify(a.state) === JSON.stringify(b.state);
 }
 
-async function saveState(game: GameRow, rematch: Rematch) {
-  const next = { ...game, state: { ...game.state, rematch }, updated_at: new Date().toISOString() };
+async function saveState(game: GameRow, rematch: Rematch, state = game.state) {
+  const next = { ...game, state: { ...state, rematch }, updated_at: new Date().toISOString() };
   await supabase.from('games').update({ state: next.state, updated_at: next.updated_at }).eq('id', game.id);
   return next;
 }
@@ -58,7 +60,7 @@ export async function startAcceptedGame(game: GameRow) {
   const first = game.state?.rematch?.from || game.state?.first;
   await saveState(game, { from: first, status: 'accepted' });
   const state = freshState(game.type, first, game.state);
-  const turn = game.type === 'stop' ? null
+  const turn = game.type === 'stop' || game.type === 'wordsearch' ? null
     : game.type === 'hang' ? (state as { setter: string }).setter
       : game.type === 'draw' ? (state as { drawer: string }).drawer
         : first;
@@ -177,7 +179,8 @@ export function useGame(type: string, me: Member, initial: () => any) {
       return;
     }
     const { data, error } = await supabase.from('games')
-      .insert({ couple_id: me.couple_id, type, state: initial(), turn: firstTurn, status: 'active' })
+      .insert({ couple_id: me.couple_id, type, state: initial(),
+        turn: type === 'stop' || type === 'wordsearch' ? null : firstTurn, status: 'active' })
       .select().single();
     if (error) {
       const raced = await loadLatest();
@@ -212,14 +215,15 @@ export function useGame(type: string, me: Member, initial: () => any) {
     setGame({ ...current, status: 'abandoned', state: stopped });
     if (mode === 'exit') return;
 
-    const state = initial();
+    const state = type === 'wordsearch' ? freshState(type, me.id, current.state) : initial();
     const { data } = await supabase.from('games')
-      .insert({ couple_id: me.couple_id, type, state, turn: type === 'stop' ? null : me.id, status: 'active' })
+      .insert({ couple_id: me.couple_id, type, state,
+        turn: type === 'stop' || type === 'wordsearch' ? null : me.id, status: 'active' })
       .select().single();
     if (data) setGame(data as GameRow);
   }, [initial, me.couple_id, me.id, type]);
 
-  const askRematch = useCallback(async () => {
+  const requestRematch = useCallback(async (state?: any) => {
     const current = gameRef.current;
     if (!current || current.status === 'active') return;
     const pending = rematchOf(current);
@@ -228,11 +232,15 @@ export function useGame(type: string, me: Member, initial: () => any) {
       if (started) { setNotice(''); setGame(started); }
       return;
     }
-    const next = await saveState(current, { from: me.id, status: 'pending' });
+    const next = await saveState(current, { from: me.id, status: 'pending' }, state);
     setNotice('Esperando a que tu pareja acepte…');
     setGame(next);
     await broadcastRematch({ game: next, rematch: { from: me.id, status: 'pending' } });
   }, [me.id]);
+
+  // La envoltura sin parámetros evita que React confunda SyntheticEvent con el estado.
+  const askRematch = useCallback(() => requestRematch(), [requestRematch]);
+  const askRematchWithState = useCallback((state: any) => requestRematch(state), [requestRematch]);
 
   const acceptRematch = useCallback(async () => {
     const current = gameRef.current;
@@ -255,8 +263,14 @@ export function useGame(type: string, me: Member, initial: () => any) {
     if (from) await broadcastRematch({ game: next, rematch: { from, status: 'rejected' } });
   }, []);
 
+  const reload = useCallback(async () => {
+    const row = await loadLatest();
+    if (row) adopt(row, row.status === 'active' && row.state?.first !== me.id);
+    return row;
+  }, [adopt, loadLatest, me.id]);
+
   return {
     game, loading, newGame, applyMove,
-    askRematch, acceptRematch, rejectRematch, stopMatch, reload: loadLatest, notice,
+    askRematch, askRematchWithState, acceptRematch, rejectRematch, stopMatch, reload, notice,
   };
 }

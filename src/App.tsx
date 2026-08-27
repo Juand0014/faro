@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { hasConfig } from './lib/supabase';
 import { authErrorMessage, ensureAuth, getMyMember, getPartnerId, touchLastSeen, type Member } from './lib/session';
 import { supabase } from './lib/supabase';
@@ -21,6 +21,8 @@ import { useActiveGames } from './lib/useActiveGames';
 import { useChatUnread } from './lib/useChatUnread';
 import { connectCoupleLive, subscribeRematch } from './lib/coupleLive';
 import type { GameRow } from './lib/useGame';
+
+const WordSearch = lazy(() => import('./games/WordSearch'));
 
 export default function App() {
   const [ready, setReady] = useState(false);
@@ -139,6 +141,11 @@ function AppShell({ member, partnerId, route }: { member: Member; partnerId: str
   else if (route.startsWith('/game/draw')) screen = <Pictionary me={member} partnerId={partnerId} />;
   else if (route.startsWith('/game/ships')) screen = <Battleship me={member} partnerId={partnerId} />;
   else if (route.startsWith('/game/look')) screen = <Fashion me={member} />;
+  else if (route.startsWith('/game/wordsearch')) screen = (
+    <Suspense fallback={<div className="wrap"><p className="muted">Preparando sopa…</p></div>}>
+      <WordSearch me={member} partnerId={partnerId} />
+    </Suspense>
+  );
   else screen = <Home me={member} activeGames={active} rematches={rematches} />;
 
   return (

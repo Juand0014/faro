@@ -275,3 +275,63 @@ alter publication supabase_realtime add table daily_answers;
 alter publication supabase_realtime add table members;
 alter publication supabase_realtime add table chat_messages;
 alter publication supabase_realtime add table looks;
+
+-- 6) SOPA DE LETRAS ----------------------------------------
+-- Reclamo atómico: bloquea la partida para que una palabra solo pueda pertenecer
+-- a quien llegue primero, incluso si ambos la marcan casi al mismo tiempo.
+create or replace function claim_word_search_word(p_game_id uuid, p_word text)
+returns games language plpgsql security definer set search_path = public as $$
+declare
+  v_game games%rowtype;
+  v_word text;
+  v_found jsonb;
+  v_players uuid[];
+  v_scores bigint[];
+  v_claimed integer;
+begin
+  if auth.uid() is null then raise exception 'no_autenticado'; end if;
+  v_word := regexp_replace(upper(trim(p_word)), '[^A-ZÑ]', '', 'g');
+
+  select * into v_game
+    from games
+    where id = p_game_id and couple_id = my_couple_id() and type = 'wordsearch'
+    for update;
+  if not found then raise exception 'partida_invalida'; end if;
+  if v_game.status <> 'active' then return v_game; end if;
+  if not exists (
+    select 1 from jsonb_array_elements_text(v_game.state->'words') as target
+    where target = v_word
+  ) then raise exception 'palabra_invalida'; end if;
+
+  v_found := coalesce(v_game.state->'found', '{}'::jsonb);
+  if v_found ? v_word then return v_game; end if;
+  v_found := jsonb_set(v_found, array[v_word], to_jsonb(auth.uid()::text), true);
+  v_game.state := jsonb_set(v_game.state, '{found}', v_found, true);
+
+  select count(*) into v_claimed from jsonb_object_keys(v_found);
+  if v_claimed = jsonb_array_length(v_game.state->'words') then
+    select array_agg(player order by score desc), array_agg(score order by score desc)
+      into v_players, v_scores
+      from (
+        select value::uuid as player, count(*) as score
+        from jsonb_each_text(v_found)
+        group by value
+      ) totals;
+    if cardinality(v_scores) = 1 or v_scores[1] > v_scores[2] then
+      v_game.status := 'won';
+      v_game.winner := v_players[1];
+    else
+      v_game.status := 'draw';
+      v_game.winner := null;
+    end if;
+  end if;
+
+  update games set state = v_game.state, status = v_game.status,
+    winner = v_game.winner, updated_at = now()
+    where id = v_game.id
+    returning * into v_game;
+  return v_game;
+end $$;
+
+revoke all on function claim_word_search_word(uuid, text) from public;
+grant execute on function claim_word_search_word(uuid, text) to authenticated;
