@@ -1,4 +1,4 @@
-const CACHE = 'faro-v12';
+const CACHE = 'faro-v13';
 self.addEventListener('install', (e) => { self.skipWaiting(); });
 self.addEventListener('activate', (e) => {
   e.waitUntil((async () => {
@@ -14,7 +14,7 @@ self.addEventListener('fetch', (e) => {
     caches.open(CACHE).then(async (c) => {
       try {
         const r = await fetch(req);
-        if (r.ok && new URL(req.url).origin === location.origin) c.put(req, r.clone());
+        if (r.ok && new URL(req.url).origin === location.origin) await c.put(req, r.clone());
         return r;
       } catch {
         return (await c.match(req)) || Response.error();
@@ -38,7 +38,11 @@ self.addEventListener('push', (e) => {
 
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
-  const dest = new URL(e.notification.data?.url || './#/home', self.location.origin).href;
+  let dest = new URL('./#/home', self.location.origin).href;
+  try {
+    const requested = new URL(e.notification.data?.url || './#/home', self.location.origin);
+    if (requested.origin === self.location.origin) dest = requested.href;
+  } catch { /* keep safe home destination */ }
   e.waitUntil((async () => {
     const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     for (const w of wins) {

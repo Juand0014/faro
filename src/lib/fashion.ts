@@ -11,8 +11,13 @@ export type FashionStroke = {
 export const MAX_FASHION_STROKES = 16;
 export const MAX_FASHION_POINTS = 96;
 export const MAX_FASHION_TOTAL_POINTS = 400;
+export const OUTFIT_VERSION = 3 as const;
+
+export type FabricMaterial = 'cotton' | 'denim' | 'satin' | 'leather' | 'knit' | 'lace';
+export type FashionReaction = '' | 'wow' | 'love' | 'wear' | 'bold';
 
 export type Outfit = {
+  version: typeof OUTFIT_VERSION;
   skin: string;
   face: string;
   hair: string;
@@ -20,18 +25,37 @@ export type Outfit = {
   top: string;
   topColor: string;
   topPattern: string;
+  topMaterial: FabricMaterial;
+  topFit: 'fitted' | 'classic' | 'oversized';
+  sleeve: 'sleeveless' | 'short' | 'long';
+  neckline: 'round' | 'v' | 'square';
   bottom: string;
   bottomColor: string;
   bottomPattern: string;
+  bottomMaterial: FabricMaterial;
+  bottomLength: 'mini' | 'midi' | 'maxi';
   dress: string;
   dressColor: string;
   dressPattern: string;
+  dressMaterial: FabricMaterial;
+  dressLength: 'mini' | 'midi' | 'maxi';
   outer: string;
   outerColor: string;
+  outerMaterial: FabricMaterial;
   shoes: string;
   shoesColor: string;
   acc: string;
+  challengeSeed: number | null;
   art: FashionStroke[];
+};
+
+export type FashionChallenge = {
+  seed: number;
+  occasion: string;
+  style: string;
+  requirement: string;
+  palette: string;
+  brief: string;
 };
 
 export type LookRow = {
@@ -170,8 +194,77 @@ export const PATTERNS = [
   { id: 'check', name: 'Cuadros' },
 ];
 
+export const MATERIALS: { id: FabricMaterial; name: string }[] = [
+  { id: 'cotton', name: 'Algodón' },
+  { id: 'denim', name: 'Denim' },
+  { id: 'satin', name: 'Satén' },
+  { id: 'leather', name: 'Cuero' },
+  { id: 'knit', name: 'Tejido' },
+  { id: 'lace', name: 'Encaje' },
+];
+
+export const FITS = [
+  { id: 'fitted', name: 'Entallado' },
+  { id: 'classic', name: 'Clásico' },
+  { id: 'oversized', name: 'Oversize' },
+];
+export const SLEEVES = [
+  { id: 'sleeveless', name: 'Sin mangas' },
+  { id: 'short', name: 'Manga corta' },
+  { id: 'long', name: 'Manga larga' },
+];
+export const NECKLINES = [
+  { id: 'round', name: 'Cuello redondo' },
+  { id: 'v', name: 'Escote V' },
+  { id: 'square', name: 'Escote cuadrado' },
+];
+export const LENGTHS = [
+  { id: 'mini', name: 'Mini' },
+  { id: 'midi', name: 'Midi' },
+  { id: 'maxi', name: 'Maxi' },
+];
+
+const OCCASIONS = ['una cita de noche', 'un paseo bajo la lluvia', 'un concierto íntimo', 'un brunch de domingo', 'una gala junto al mar', 'un viaje sorpresa'];
+const STYLES = ['editorial y elegante', 'romántico contemporáneo', 'atrevido y sofisticado', 'relajado con intención', 'retro moderno', 'minimalista con carácter'];
+const REQUIREMENTS = ['incluye una falda', 'usa una tercera pieza', 'destaca los zapatos', 'añade un detalle dibujado', 'combina dos texturas', 'incluye un accesorio protagonista'];
+const PALETTES = ['vino y dorado', 'marfil y negro', 'azul y camel', 'rosa y borgoña', 'olivo y crema', 'lila y plata'];
+
+export function fashionChallenge(seed: number): FashionChallenge {
+  const value = Math.abs(Math.trunc(Number.isFinite(seed) ? seed : 0));
+  const pick = (items: string[], shift: number) => items[Math.floor(value / shift) % items.length];
+  const occasion = pick(OCCASIONS, 1);
+  const style = pick(STYLES, 7);
+  const requirement = pick(REQUIREMENTS, 43);
+  const palette = pick(PALETTES, 257);
+  return {
+    seed: value,
+    occasion,
+    style,
+    requirement,
+    palette,
+    brief: `Diseña para ${occasion}: un look ${style}, en ${palette}, que ${requirement}.`,
+  };
+}
+
+const RATING_PREFIX = '[[atelier:';
+
+export function formatRatingNote(reaction: FashionReaction, note: string): string {
+  const clean = note.trim().replace(/\s+/g, ' ');
+  if (!reaction) return clean.slice(0, 200);
+  const prefix = `${RATING_PREFIX}${reaction}]]`;
+  return `${prefix}${clean}`.slice(0, 200);
+}
+
+export function parseRatingNote(value: string): { reaction: FashionReaction; note: string } {
+  const match = value.match(/^\[\[atelier:(wow|love|wear|bold)\]\]/);
+  return match
+    ? { reaction: match[1] as FashionReaction, note: value.slice(match[0].length) }
+    : { reaction: '', note: value };
+}
+
 export function defaultOutfit(): Outfit {
   return {
+    version: OUTFIT_VERSION,
     skin: '#e8b89a',
     face: 'soft',
     hair: 'long',
@@ -179,22 +272,32 @@ export function defaultOutfit(): Outfit {
     top: 'blouse',
     topColor: '#e8a0b4',
     topPattern: 'solid',
+    topMaterial: 'cotton',
+    topFit: 'classic',
+    sleeve: 'short',
+    neckline: 'round',
     bottom: 'skirt',
     bottomColor: '#1a1520',
     bottomPattern: 'solid',
+    bottomMaterial: 'denim',
+    bottomLength: 'midi',
     dress: 'none',
     dressColor: '#d4a054',
     dressPattern: 'solid',
+    dressMaterial: 'satin',
+    dressLength: 'midi',
     outer: 'none',
     outerColor: '#1e3a5f',
+    outerMaterial: 'cotton',
     shoes: 'pumps',
     shoesColor: '#1a1520',
     acc: 'necklace',
+    challengeSeed: null,
     art: [],
   };
 }
 
-const clamp = (n: number) => Math.max(0, Math.min(100, Number.isFinite(n) ? n : 0));
+const clamp = (n: number) => Math.round(Math.max(0, Math.min(100, Number.isFinite(n) ? n : 0)) * 10) / 10;
 
 export function addFashionPoint(stroke: FashionStroke, point: FashionPoint): FashionStroke {
   if (stroke.points.length >= MAX_FASHION_POINTS) return stroke;
@@ -210,6 +313,14 @@ export function normalizeOutfit(value: unknown): Outfit {
   const raw = value as Record<string, unknown>;
   const text = (key: keyof Outfit, fallback: string) =>
     typeof raw[key] === 'string' ? String(raw[key]).slice(0, 32) : fallback;
+  const material = (key: keyof Outfit, fallback: FabricMaterial): FabricMaterial => {
+    const candidate = raw[key];
+    return MATERIALS.some((item) => item.id === candidate) ? candidate as FabricMaterial : fallback;
+  };
+  const option = <T extends string>(key: keyof Outfit, options: readonly T[], fallback: T): T =>
+    typeof raw[key] === 'string' && options.includes(raw[key] as T) ? raw[key] as T : fallback;
+  const listed = (key: keyof Outfit, items: { id: string }[], fallback: string) =>
+    option(key, items.map((item) => item.id), fallback);
   const rawArt = Array.isArray(raw.art) ? raw.art : [];
   let pointBudget = MAX_FASHION_TOTAL_POINTS;
   const art: FashionStroke[] = rawArt.slice(0, MAX_FASHION_STROKES).flatMap((item, index) => {
@@ -238,24 +349,37 @@ export function normalizeOutfit(value: unknown): Outfit {
   });
 
   return {
-    skin: text('skin', base.skin),
-    face: text('face', base.face),
-    hair: text('hair', base.hair),
-    hairColor: text('hairColor', base.hairColor),
-    top: text('top', base.top),
+    version: OUTFIT_VERSION,
+    skin: listed('skin', SKINS, base.skin),
+    face: listed('face', FACES, base.face),
+    hair: listed('hair', HAIRS, base.hair),
+    hairColor: listed('hairColor', HAIR_COLORS, base.hairColor),
+    top: listed('top', TOPS, base.top),
     topColor: text('topColor', base.topColor),
-    topPattern: text('topPattern', base.topPattern),
-    bottom: text('bottom', base.bottom),
+    topPattern: listed('topPattern', PATTERNS, base.topPattern),
+    topMaterial: material('topMaterial', base.topMaterial),
+    topFit: option('topFit', ['fitted', 'classic', 'oversized'], base.topFit),
+    sleeve: option('sleeve', ['sleeveless', 'short', 'long'], base.sleeve),
+    neckline: option('neckline', ['round', 'v', 'square'], base.neckline),
+    bottom: listed('bottom', BOTTOMS, base.bottom),
     bottomColor: text('bottomColor', base.bottomColor),
-    bottomPattern: text('bottomPattern', base.bottomPattern),
-    dress: text('dress', base.dress),
+    bottomPattern: listed('bottomPattern', PATTERNS, base.bottomPattern),
+    bottomMaterial: material('bottomMaterial', base.bottomMaterial),
+    bottomLength: option('bottomLength', ['mini', 'midi', 'maxi'], base.bottomLength),
+    dress: listed('dress', DRESSES, base.dress),
     dressColor: text('dressColor', base.dressColor),
-    dressPattern: text('dressPattern', base.dressPattern),
-    outer: text('outer', base.outer),
+    dressPattern: listed('dressPattern', PATTERNS, base.dressPattern),
+    dressMaterial: material('dressMaterial', base.dressMaterial),
+    dressLength: option('dressLength', ['mini', 'midi', 'maxi'], base.dressLength),
+    outer: listed('outer', OUTERS, base.outer),
     outerColor: text('outerColor', base.outerColor),
-    shoes: text('shoes', base.shoes),
+    outerMaterial: material('outerMaterial', base.outerMaterial),
+    shoes: listed('shoes', SHOES, base.shoes),
     shoesColor: text('shoesColor', base.shoesColor),
-    acc: text('acc', base.acc),
+    acc: listed('acc', ACCS, base.acc),
+    challengeSeed: typeof raw.challengeSeed === 'number' && Number.isFinite(raw.challengeSeed)
+      ? Math.abs(Math.trunc(raw.challengeSeed))
+      : null,
     art,
   };
 }

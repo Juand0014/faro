@@ -8,7 +8,7 @@ const list = [
   { href: '/game/hang', type: 'hang', icon: '🪢', name: 'Ahorcado', desc: 'Uno piensa la palabra, el otro adivina.' },
   { href: '/game/draw', type: 'draw', icon: '🎨', name: 'Pictionary', desc: 'Dibuja la palabra para que tu pareja la adivine.' },
   { href: '/game/ships', type: 'ships', icon: '🚢', name: 'Batalla naval', desc: 'Prepara tu flota y hunde la de tu pareja.' },
-  { href: '/game/look', type: 'look', icon: '👗', name: 'Atelier', desc: 'Diseña un look. Tu pareja lo puntúa del 1 al 10 y queda guardado.' },
+  { href: '/game/look', type: 'look', icon: '👗', name: 'Atelier', desc: 'Crea un croquis libre o acepta un reto. Tu pareja lo puntúa y queda guardado.' },
 ];
 
 export default function Games(

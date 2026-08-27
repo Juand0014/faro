@@ -1,5 +1,6 @@
 import { detectPlace } from './place';
 import { supabase } from './supabase';
+import { wipeFashionDrafts } from './fashionDrafts';
 
 export type Member = {
   id: string; couple_id: string; name: string; timezone: string;
@@ -36,14 +37,18 @@ export async function ensureAuth(): Promise<string> {
   if (data.session) return data.session.user.id;
   const { data: signed, error } = await supabase.auth.signInAnonymously();
   if (error) throw error;
-  return signed.user!.id;
+  if (!signed.user) throw new Error('anonymous_sign_in_returned_no_user');
+  return signed.user.id;
 }
 
 export async function getMyMember(): Promise<Member | null> {
   const { data: u } = await supabase.auth.getUser();
   if (!u.user) return null;
   const { data } = await supabase.from('members').select('*').eq('id', u.user.id).maybeSingle();
-  return (data as Member) ?? null;
+  const member = data as Record<string, unknown> | null;
+  if (!member || typeof member.id !== 'string' || typeof member.couple_id !== 'string'
+    || typeof member.name !== 'string' || typeof member.timezone !== 'string') return null;
+  return member as unknown as Member;
 }
 
 /** El asiento actual de la pareja. Cambia si ella entra desde otro aparato, así que nunca se cachea. */
@@ -72,6 +77,7 @@ export async function touchLastSeen() {
 
 /** Cierra la sesión de este aparato. El asiento sigue tuyo hasta que entres en el otro con el mismo nombre. */
 export async function leaveThisDevice() {
+  await wipeFashionDrafts();
   await supabase.auth.signOut();
   window.location.hash = '#/home';
   window.location.reload();

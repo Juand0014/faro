@@ -25,8 +25,16 @@ const TARGETS: { id: GarmentLayer; name: string }[] = [
 ];
 
 function path(points: FashionPoint[]) {
-  const value = points.map((p, i) => `${i ? 'L' : 'M'} ${p.x} ${p.y}`).join(' ');
-  return points.length === 1 ? `${value} l .01 .01` : value;
+  if (!points.length) return '';
+  if (points.length === 1) return `M ${points[0].x} ${points[0].y} l .01 .01`;
+  const commands = [`M ${points[0].x} ${points[0].y}`];
+  for (let i = 1; i < points.length - 1; i += 1) {
+    const next = points[i + 1];
+    commands.push(`Q ${points[i].x} ${points[i].y} ${(points[i].x + next.x) / 2} ${(points[i].y + next.y) / 2}`);
+  }
+  const last = points[points.length - 1];
+  commands.push(`L ${last.x} ${last.y}`);
+  return commands.join(' ');
 }
 
 export default function GarmentSketch({
@@ -43,10 +51,12 @@ export default function GarmentSketch({
   const [target, setTarget] = useState<GarmentLayer>(initialTarget);
   const [color, setColor] = useState('#f4efe6');
   const [width, setWidth] = useState(4);
+  const [tool, setTool] = useState<'draw' | 'erase'>('draw');
   const [draft, setDraft] = useState(art);
   const [cursor, setCursor] = useState<FashionPoint>({ x: 50, y: 50 });
   const gridId = useId().replace(/:/g, '');
   const artRef = useRef(art);
+  const totalPointsRef = useRef(art.reduce((sum, stroke) => sum + stroke.points.length, 0));
   const activeId = useRef<string | null>(null);
   const activePointer = useRef<number | null>(null);
   const keyboardDrawing = useRef(false);
@@ -54,11 +64,13 @@ export default function GarmentSketch({
   useEffect(() => {
     if (activePointer.current !== null) return;
     artRef.current = art;
+    totalPointsRef.current = art.reduce((sum, stroke) => sum + stroke.points.length, 0);
     setDraft(art);
   }, [art]);
 
   const commit = (next: FashionStroke[], publish = false) => {
     artRef.current = next;
+    totalPointsRef.current = next.reduce((sum, stroke) => sum + stroke.points.length, 0);
     setDraft(next);
     if (publish) onChange(next);
   };
@@ -73,8 +85,15 @@ export default function GarmentSketch({
 
   const begin = (event: PointerEvent<SVGSVGElement>) => {
     if (!event.isPrimary || activePointer.current !== null || keyboardDrawing.current) return;
-    const used = artRef.current.reduce((sum, stroke) => sum + stroke.points.length, 0);
-    if (artRef.current.length >= MAX_FASHION_STROKES || used >= MAX_FASHION_TOTAL_POINTS) return;
+    const point = pointFor(event);
+    if (tool === 'erase') {
+      const nearest = [...artRef.current].reverse().find((stroke) =>
+        stroke.target === target && stroke.points.some((p) => Math.hypot(p.x - point.x, p.y - point.y) < 9));
+      if (nearest) commit(artRef.current.filter((stroke) => stroke.id !== nearest.id), true);
+      return;
+    }
+    if (artRef.current.length >= MAX_FASHION_STROKES
+      || totalPointsRef.current >= MAX_FASHION_TOTAL_POINTS) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     activePointer.current = event.pointerId;
     const stroke: FashionStroke = {
@@ -82,7 +101,7 @@ export default function GarmentSketch({
       target,
       color,
       width,
-      points: [pointFor(event)],
+      points: [point],
     };
     activeId.current = stroke.id;
     commit([...artRef.current, stroke]);
@@ -91,8 +110,7 @@ export default function GarmentSketch({
   const move = (event: PointerEvent<SVGSVGElement>) => {
     if (activePointer.current !== event.pointerId || !activeId.current
       || !event.currentTarget.hasPointerCapture(event.pointerId)) return;
-    const used = artRef.current.reduce((sum, stroke) => sum + stroke.points.length, 0);
-    if (used >= MAX_FASHION_TOTAL_POINTS) return;
+    if (totalPointsRef.current >= MAX_FASHION_TOTAL_POINTS) return;
     const id = activeId.current;
     const next = artRef.current.map((stroke) =>
       stroke.id === id ? addFashionPoint(stroke, pointFor(event)) : stroke);
@@ -118,8 +136,9 @@ export default function GarmentSketch({
     };
     if (event.key === ' ' && !event.repeat && !keyboardDrawing.current) {
       event.preventDefault();
-      const used = artRef.current.reduce((sum, stroke) => sum + stroke.points.length, 0);
-      if (artRef.current.length >= MAX_FASHION_STROKES || used >= MAX_FASHION_TOTAL_POINTS) return;
+      if (tool === 'erase') return;
+      if (artRef.current.length >= MAX_FASHION_STROKES
+        || totalPointsRef.current >= MAX_FASHION_TOTAL_POINTS) return;
       const stroke: FashionStroke = {
         id: crypto.randomUUID(), target, color, width, points: [cursor],
       };
@@ -137,8 +156,7 @@ export default function GarmentSketch({
     };
     setCursor(next);
     if (!keyboardDrawing.current || !activeId.current) return;
-    const used = artRef.current.reduce((sum, stroke) => sum + stroke.points.length, 0);
-    if (used >= MAX_FASHION_TOTAL_POINTS) return;
+    if (totalPointsRef.current >= MAX_FASHION_TOTAL_POINTS) return;
     const id = activeId.current;
     commit(artRef.current.map((stroke) => stroke.id === id ? addFashionPoint(stroke, next) : stroke));
   };
@@ -158,6 +176,22 @@ export default function GarmentSketch({
 
   const visible = draft.filter((stroke) => stroke.target === target);
   const totalPoints = draft.reduce((sum, stroke) => sum + stroke.points.length, 0);
+  const addStamp = (kind: 'seam' | 'zip' | 'flower') => {
+    if (artRef.current.length >= MAX_FASHION_STROKES) return;
+    const shapes = {
+      seam: [{ x: 25, y: 55 }, { x: 75, y: 55 }],
+      zip: [{ x: 50, y: 24 }, { x: 50, y: 76 }],
+      flower: [
+        { x: 50, y: 38 }, { x: 57, y: 47 }, { x: 68, y: 50 }, { x: 57, y: 55 },
+        { x: 50, y: 66 }, { x: 43, y: 55 }, { x: 32, y: 50 }, { x: 43, y: 45 }, { x: 50, y: 38 },
+      ],
+    };
+    if (totalPointsRef.current + shapes[kind].length > MAX_FASHION_TOTAL_POINTS) return;
+    const stroke: FashionStroke = {
+      id: crypto.randomUUID(), target, color, width: kind === 'flower' ? 3 : 2, points: shapes[kind],
+    };
+    commit([...artRef.current, stroke], true);
+  };
 
   return (
     <div className="look-sketch">
@@ -195,9 +229,9 @@ export default function GarmentSketch({
         </defs>
         <rect width="100" height="100" fill="#f7f1e7" />
         <rect width="100" height="100" fill={`url(#${gridId})`} />
-        {target === 'top' && <path d="M18 22 L34 12 H66 L82 22 L74 82 H26 Z" className="look-paper-shape" />}
-        {target === 'bottom' && <path d="M30 10 H70 L84 90 H16 Z" className="look-paper-shape" />}
-        {target === 'dress' && <path d="M34 8 H66 L74 40 L92 92 H8 L26 40 Z" className="look-paper-shape" />}
+        {target === 'top' && <path d="M16 25 Q26 17 36 12 Q42 19 50 19 Q58 19 64 12 Q74 17 84 25 L75 43 L71 84 Q50 91 29 84 L25 43 Z" className="look-paper-shape" />}
+        {target === 'bottom' && <path d="M30 10 Q50 6 70 10 L78 45 Q85 68 88 91 H56 L50 48 L44 91 H12 Q15 68 22 45 Z" className="look-paper-shape" />}
+        {target === 'dress' && <path d="M34 9 Q42 16 50 16 Q58 16 66 9 L74 31 Q70 42 69 47 Q83 68 91 93 H9 Q17 68 31 47 Q30 42 26 31 Z" className="look-paper-shape" />}
         {visible.map((stroke) => (
           <path key={stroke.id} d={path(stroke.points)} fill="none" stroke={stroke.color}
             strokeWidth={stroke.width} strokeLinecap="round" strokeLinejoin="round" />
@@ -212,16 +246,26 @@ export default function GarmentSketch({
           <button key={ink.color} type="button" aria-label={ink.name} title={ink.name}
             aria-pressed={color === ink.color} className={color === ink.color ? 'on' : ''}
             style={{ background: ink.color }}
-            onClick={() => setColor(ink.color)} />
+            onClick={() => { setColor(ink.color); setTool('draw'); }} />
         ))}
         {[2, 4, 7].map((size) => (
           <button key={size} type="button" className={`look-width${width === size ? ' on' : ''}`}
             aria-pressed={width === size}
             aria-label={`Trazo ${size === 2 ? 'fino' : size === 4 ? 'medio' : 'grueso'}`}
-            onClick={() => setWidth(size)}>
+            onClick={() => { setWidth(size); setTool('draw'); }}>
             <span style={{ height: size }} />
           </button>
         ))}
+      </div>
+
+      <div className="look-sketch-tools" role="group" aria-label="Herramientas de dibujo">
+        <button type="button" aria-pressed={tool === 'draw'} className={tool === 'draw' ? 'on' : ''}
+          onClick={() => setTool('draw')}>Pincel</button>
+        <button type="button" aria-pressed={tool === 'erase'} className={tool === 'erase' ? 'on' : ''}
+          onClick={() => setTool('erase')}>Borrador</button>
+        <button type="button" onClick={() => addStamp('seam')}>Costura</button>
+        <button type="button" onClick={() => addStamp('zip')}>Cierre</button>
+        <button type="button" onClick={() => addStamp('flower')}>Flor</button>
       </div>
 
       <div className="look-sketch-actions">

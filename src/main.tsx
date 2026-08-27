@@ -6,14 +6,15 @@ import './styles.css';
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', (e) => {
     const url = e.data?.url;
-    if (e.data?.type !== 'faro-open' || typeof url !== 'string') return;
+    if (e.source !== navigator.serviceWorker.controller
+      || e.data?.type !== 'faro-open' || typeof url !== 'string') return;
     try {
       const hash = new URL(url, location.href).hash;
       if (hash) location.hash = hash;
     } catch { /* ignore */ }
   });
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register(import.meta.env.BASE_URL + 'sw.js?v=12').catch(() => {});
+    navigator.serviceWorker.register(import.meta.env.BASE_URL + 'sw.js?v=13').catch(() => {});
   });
 }
 
