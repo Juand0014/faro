@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { Member } from '../lib/session';
 import { supabase } from '../lib/supabase';
 import { useGame, type GameRow } from '../lib/useGame';
@@ -11,6 +11,7 @@ import {
   legalMoves,
   moveParchis,
   parchisSeatFor,
+  type ParchisMove,
   type ParchisPieceCount,
   type ParchisSeat,
   type ParchisState,
@@ -18,8 +19,6 @@ import {
 import GameReactions from '../components/GameReactions';
 import RematchPanel from '../components/RematchPanel';
 import StopMatchPanel from '../components/StopMatchPanel';
-
-const DICE = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
 
 function rpcError(error: unknown) {
   const message = error && typeof error === 'object' && 'message' in error ? String(error.message) : '';
@@ -53,6 +52,10 @@ export default function Parchis({ me, partnerId }: { me: Member; partnerId: stri
     [myTurn, seat, state],
   );
   const movable = useMemo(() => new Set(moves.map((move) => move.piece)), [moves]);
+  const destinations = useMemo(
+    () => new Map(moves.map((move) => [move.piece, move])),
+    [moves],
+  );
 
   useEffect(() => {
     mounted.current = true;
@@ -201,34 +204,43 @@ export default function Parchis({ me, partnerId }: { me: Member; partnerId: stri
           role="img"
           aria-label={`Turno del color ${turnSeat === 'a' ? 'coral' : 'turquesa'}`} />
       </header>
-      {notice && <div className="livepill" role="status">{notice}</div>}
-      <div className="turnbar" role="status">{status}</div>
+      {notice && <div className="livepill" role="status" aria-label="Aviso del juego">{notice}</div>}
+      <div className={`parchis-status seat-${turnSeat}`} role="status" aria-label="Estado del turno">
+        <span aria-hidden="true">{myTurn ? '●' : '○'}</span>
+        {status}
+      </div>
 
       <div className="parchis-hud card">
-        <div className="parchis-score" role="group" aria-label="Fichas en meta">
-          <GoalDots label="Tú" seat={seat} pieces={state.pieces[seat]} />
-          <GoalDots label="Pareja" seat={seat === 'a' ? 'b' : 'a'} pieces={state.pieces[seat === 'a' ? 'b' : 'a']} />
-        </div>
+        <GoalDots label="Tú" seat={seat} pieces={state.pieces[seat]} active={myTurn} />
         <button type="button" className="parchis-die" onClick={roll}
           disabled={!myTurn || state.phase !== 'roll' || busy}
-          aria-label={state.phase === 'roll' ? 'Tirar el dado' : `Dado: ${state.dice}`}>
-          <span aria-hidden="true">{state.dice ? DICE[state.dice - 1] : '🎲'}</span>
-          <small>{busy ? 'Sincronizando…' : state.phase === 'roll' ? 'Tirar dado' : `Salió ${state.dice}`}</small>
+          aria-label={state.phase === 'roll'
+            ? 'Tirar el dado'
+            : state.phase === 'bonus' ? `Premio: ${state.bonus} pasos` : `Dado: ${state.dice}`}>
+          <DieFace value={state.dice} rolling={busy} bonus={state.phase === 'bonus' ? state.bonus : 0} />
+          <small>{busy
+            ? 'Lanzando…'
+            : state.phase === 'roll' ? 'Tirar dado' : state.phase === 'bonus' ? `Premio +${state.bonus}` : `Salió ${state.dice}`}</small>
         </button>
-        <div className="parchis-six">
-          <span>Seises {state.sixStreak}/3</span>
+        <GoalDots label="Pareja" seat={seat === 'a' ? 'b' : 'a'}
+          pieces={state.pieces[seat === 'a' ? 'b' : 'a']} active={!myTurn} />
+      </div>
+      {state.sixStreak > 0 && (
+        <div className="parchis-streak">
+          <span>Racha de seis: {state.sixStreak}/3</span>
           <div aria-hidden="true">
             {[1, 2, 3].map((value) => <i key={value} className={value <= state.sixStreak ? 'on' : ''} />)}
           </div>
         </div>
-      </div>
+      )}
       {myTurn && state.phase === 'move' && moves.length === 0 && (
         <button type="button" className="btn ghost parchis-pass" disabled={busy} onClick={passTurn}>
           Pasar turno
         </button>
       )}
 
-      <ParchisBoard state={state} mySeat={seat} movable={movable} disabled={!myTurn || busy} onPiece={move} />
+      <ParchisBoard state={state} mySeat={seat} movable={movable} destinations={destinations}
+        disabled={!myTurn || busy} onPiece={move} />
 
       {message && <p className="ws-message" role="status">{message}</p>}
       <GameReactions gameId={game.id} gameType="parchis" memberId={me.id} celebration={game.status === 'won'} />
@@ -250,83 +262,246 @@ export default function Parchis({ me, partnerId }: { me: Member; partnerId: stri
   );
 }
 
-function GoalDots({ label, seat, pieces }: { label: string; seat: ParchisSeat; pieces: number[] }) {
+function GoalDots({
+  label,
+  seat,
+  pieces,
+  active,
+}: {
+  label: string;
+  seat: ParchisSeat;
+  pieces: number[];
+  active: boolean;
+}) {
   const finished = pieces.filter((position) => position === PARCHIS_GOAL).length;
+  const running = pieces.filter((position) => position >= 0 && position < PARCHIS_GOAL).length;
   return (
-    <div>
-      <span>{label}</span>
+    <div className={`parchis-player seat-${seat}${active ? ' active' : ''}`}
+      aria-current={active ? 'true' : undefined}>
+      <span className="parchis-player-token" aria-hidden="true" />
+      <span className="parchis-player-name">{label}</span>
       <span className="sr-only">: {finished} de {pieces.length} fichas en meta</span>
       <div className={`parchis-goals seat-${seat}`} aria-hidden="true">
         {pieces.map((_, index) => <i key={index} className={index < finished ? 'home' : ''} />)}
       </div>
+      <small>{finished} meta · {running} pista</small>
     </div>
   );
 }
 
+const DIE_DOTS: Record<number, number[]> = {
+  1: [4],
+  2: [0, 8],
+  3: [0, 4, 8],
+  4: [0, 2, 6, 8],
+  5: [0, 2, 4, 6, 8],
+  6: [0, 2, 3, 5, 6, 8],
+};
+
+function DieFace({ value, rolling, bonus }: { value: number | null; rolling: boolean; bonus: 0 | 10 | 20 }) {
+  return (
+    <span className={`parchis-die-cube${rolling ? ' rolling' : ''}${value === null ? ' ready' : ''}${bonus ? ' bonus' : ''}`}
+      aria-hidden="true">
+      {Array.from({ length: 9 }, (_, index) => (
+        <i key={index} className={!bonus && value !== null && DIE_DOTS[value].includes(index) ? 'visible' : ''} />
+      ))}
+      {bonus ? <b>+{bonus}</b> : value === null && <b>?</b>}
+    </span>
+  );
+}
+
 function trackPoint(cell: number) {
-  const slot = cell - 1;
-  if (slot <= 16) return { x: 60 + slot * 30, y: 45 };
-  if (slot <= 33) return { x: 555, y: 60 + (slot - 17) * 30 };
-  if (slot <= 50) return { x: 540 - (slot - 34) * 30, y: 555 };
-  return { x: 45, y: 540 - (slot - 51) * 30 };
+  const step = 192 / 7;
+  if (cell <= 7) return { x: 364, y: 574 - (cell - 1) * step };
+  if (cell === 8) return { x: 364, y: 388 };
+  if (cell === 9) return { x: 388, y: 364 };
+  if (cell <= 16) return { x: 410 + (cell - 10) * step, y: 364 };
+  if (cell === 17) return { x: 574, y: 300 };
+  if (cell <= 24) return { x: 574 - (cell - 18) * step, y: 236 };
+  if (cell === 25) return { x: 388, y: 236 };
+  if (cell === 26) return { x: 364, y: 212 };
+  if (cell <= 33) return { x: 364, y: 190 - (cell - 27) * step };
+  if (cell === 34) return { x: 300, y: 26 };
+  if (cell <= 41) return { x: 236, y: 26 + (cell - 35) * step };
+  if (cell === 42) return { x: 236, y: 212 };
+  if (cell === 43) return { x: 212, y: 236 };
+  if (cell <= 50) return { x: 190 - (cell - 44) * step, y: 236 };
+  if (cell === 51) return { x: 26, y: 300 };
+  if (cell <= 58) return { x: 26 + (cell - 52) * step, y: 364 };
+  if (cell === 59) return { x: 212, y: 364 };
+  if (cell === 60) return { x: 236, y: 388 };
+  if (cell <= 67) return { x: 236, y: 410 + (cell - 61) * step };
+  return { x: 300, y: 574 };
+}
+
+function lanePoint(seat: ParchisSeat, position: number) {
+  const index = position - 68;
+  const step = 192 / 7;
+  return seat === 'a'
+    ? { x: 300, y: 547 - index * step }
+    : { x: 300, y: 53 + index * step };
 }
 
 function tokenPoint(seat: ParchisSeat, position: number, index: number, count: number) {
   if (position === -1) {
     const angle = (Math.PI * 2 * index) / count - Math.PI / 2;
-    const center = seat === 'a' ? { x: 130, y: 155 } : { x: 470, y: 445 };
+    const center = seat === 'a' ? { x: 492, y: 492 } : { x: 108, y: 108 };
     return { x: center.x + Math.cos(angle) * 45, y: center.y + Math.sin(angle) * 45 };
   }
   if (position <= 67) return trackPoint(globalCell(seat, position)!);
-  if (position < PARCHIS_GOAL) {
-    const lane = position - 68;
-    const start = trackPoint(seat === 'a' ? 5 : 39);
-    const progress = (lane + 1) / 8;
-    return {
-      x: start.x + (300 - start.x) * progress,
-      y: start.y + (300 - start.y) * progress,
-    };
-  }
-  const angle = (Math.PI * 2 * index) / count;
-  return { x: 300 + Math.cos(angle) * 20, y: 300 + Math.sin(angle) * 20 };
+  if (position < PARCHIS_GOAL) return lanePoint(seat, position);
+  const angle = (Math.PI * 2 * index) / count - Math.PI / 2;
+  const center = seat === 'a' ? { x: 300, y: 326 } : { x: 300, y: 274 };
+  return { x: center.x + Math.cos(angle) * 17, y: center.y + Math.sin(angle) * 17 };
+}
+
+function trackCellSize(cell: number) {
+  const vertical = cell <= 8 || (cell >= 26 && cell <= 42) || cell >= 60;
+  return vertical ? { width: 64, height: 27 } : { width: 27, height: 64 };
 }
 
 function ParchisBoard({
   state,
   mySeat,
   movable,
+  destinations,
   disabled,
   onPiece,
 }: {
   state: ParchisState;
   mySeat: ParchisSeat;
   movable: ReadonlySet<number>;
+  destinations: ReadonlyMap<number, ParchisMove>;
   disabled: boolean;
   onPiece: (piece: number) => void;
 }) {
+  const pieceRefs = useRef(new Map<string, HTMLButtonElement>());
+  const lastSequence = useRef(-1);
+  const svgId = useId().replace(/:/g, '');
+
+  useEffect(() => {
+    const last = state.last;
+    if (!last || state.seq === lastSequence.current || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      lastSequence.current = state.seq;
+      return;
+    }
+    lastSequence.current = state.seq;
+    const element = pieceRefs.current.get(`${last.seat}-${last.piece}`);
+    const board = element?.parentElement;
+    if (!element || !board) return;
+
+    const finalPoint = tokenPoint(last.seat, last.to, last.piece, state.pieceCount);
+    const positions = last.from === -1
+      ? [-1, last.to]
+      : Array.from({ length: last.to - last.from + 1 }, (_, index) => last.from + index);
+    const scale = board.getBoundingClientRect().width / 600;
+    const frames = positions.map((position, index) => {
+      const point = tokenPoint(last.seat, position, last.piece, state.pieceCount);
+      const lift = index > 0 && index < positions.length - 1 ? -10 : 0;
+      return {
+        transform: `translate(calc(-50% + ${(point.x - finalPoint.x) * scale}px), calc(-50% + ${(point.y - finalPoint.y) * scale + lift}px)) scale(${index === positions.length - 1 ? 1 : 1.05})`,
+        offset: positions.length === 1 ? 1 : index / (positions.length - 1),
+      };
+    });
+    const animation = element.animate(frames, {
+      duration: Math.min(1050, 320 + positions.length * 70),
+      easing: 'cubic-bezier(.22,.8,.25,1)',
+    });
+    navigator.vibrate?.(last.capture !== null ? [35, 35, 80] : last.to === PARCHIS_GOAL ? [40, 30, 40] : 25);
+    return () => animation.cancel();
+  }, [state.seq]);
+
+  const eventLabel = state.last?.capture != null
+    ? '+20 · ¡Captura!'
+    : state.last?.to === PARCHIS_GOAL
+      ? state.phase === 'over' ? '¡Victoria!' : '+10 · ¡En casa!'
+      : null;
+  const targetMoves = Array.from(destinations.values()).filter(
+    (move, index, all) => all.findIndex((candidate) => candidate.to === move.to) === index,
+  );
+
   return (
-    <div className="parchis-board" role="region" aria-label="Tablero de Parchís">
+    <div className={`parchis-board${state.last?.capture != null ? ' capture-event' : ''}`}
+      role="region" aria-label="Tablero de Parchís">
       <svg viewBox="0 0 600 600" aria-hidden="true">
-        <rect className="parchis-paper" x="20" y="20" width="560" height="560" rx="42" />
-        <circle className="parchis-yard yard-a" cx="130" cy="155" r="78" />
-        <circle className="parchis-yard yard-b" cx="470" cy="445" r="78" />
-        <path className="parchis-center" d="M300 245 355 300 300 355 245 300Z" />
+        <defs>
+          <linearGradient id={`${svgId}-wood`} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stopColor="#74482c" />
+            <stop offset=".45" stopColor="#b27a4d" />
+            <stop offset="1" stopColor="#5b3524" />
+          </linearGradient>
+          <linearGradient id={`${svgId}-paper`} x1="0" y1="0" x2=".8" y2="1">
+            <stop offset="0" stopColor="#fffdf4" />
+            <stop offset=".55" stopColor="#f5ecd9" />
+            <stop offset="1" stopColor="#e8d8bd" />
+          </linearGradient>
+          <filter id={`${svgId}-inset`}>
+            <feDropShadow dx="0" dy="3" stdDeviation="3" floodOpacity=".28" />
+          </filter>
+          <pattern id={`${svgId}-grain`} width="34" height="34" patternUnits="userSpaceOnUse">
+            <path d="M0 8C10 3 20 13 34 7M0 25c12-7 23 6 34-1" fill="none"
+              stroke="#6d4228" strokeOpacity=".2" strokeWidth="1.2" />
+          </pattern>
+        </defs>
+        <rect className="parchis-wood" x="3" y="3" width="594" height="594" rx="32" fill={`url(#${svgId}-wood)`} />
+        <rect x="3" y="3" width="594" height="594" rx="32" fill={`url(#${svgId}-grain)`} />
+        <rect className="parchis-paper" x="12" y="12" width="576" height="576" rx="23" fill={`url(#${svgId}-paper)`} />
+
+        <g className="parchis-home home-b">
+          <rect x="26" y="26" width="164" height="164" rx="28" />
+          <circle cx="108" cy="108" r="59" />
+          <circle cx="108" cy="108" r="34" />
+        </g>
+        <g className="parchis-home home-blue inactive">
+          <rect x="410" y="26" width="164" height="164" rx="28" />
+          <circle cx="492" cy="108" r="59" />
+          <circle cx="492" cy="108" r="34" />
+        </g>
+        <g className="parchis-home home-green inactive">
+          <rect x="26" y="410" width="164" height="164" rx="28" />
+          <circle cx="108" cy="492" r="59" />
+          <circle cx="108" cy="492" r="34" />
+        </g>
+        <g className="parchis-home home-a">
+          <rect x="410" y="410" width="164" height="164" rx="28" />
+          <circle cx="492" cy="492" r="59" />
+          <circle cx="492" cy="492" r="34" />
+        </g>
+
+        <path className="parchis-center center-b" d="M204 204H396L300 300Z" />
+        <path className="parchis-center center-blue" d="M396 204V396L300 300Z" />
+        <path className="parchis-center center-a" d="M396 396H204L300 300Z" />
+        <path className="parchis-center center-green" d="M204 396V204L300 300Z" />
+
         {Array.from({ length: 68 }, (_, index) => {
           const cell = index + 1;
           const point = trackPoint(cell);
+          const size = trackCellSize(cell);
           const lastCell = state.last && state.last.to <= 67 ? globalCell(state.last.seat, state.last.to) : null;
-          return <circle key={cell}
+          return <rect key={cell}
             className={`parchis-cell${isSafeCell(cell) ? ' safe' : ''}${cell === 5 ? ' start-a' : ''}${cell === 39 ? ' start-b' : ''}${lastCell === cell ? ' last' : ''}`}
-            cx={point.x} cy={point.y} r="11" />;
+              x={point.x - size.width / 2} y={point.y - size.height / 2}
+              width={size.width} height={size.height} rx="3" />;
         })}
         {(['a', 'b'] as const).flatMap((seat) =>
           Array.from({ length: 7 }, (_, index) => {
-            const point = tokenPoint(seat, 68 + index, index, 7);
+            const point = lanePoint(seat, 68 + index);
             const last = state.last?.seat === seat && state.last.to === 68 + index;
-            return <circle key={`${seat}-${index}`} className={`parchis-cell lane seat-${seat}${last ? ' last' : ''}`}
-              cx={point.x} cy={point.y} r="11" />;
+            return <rect key={`${seat}-${index}`} className={`parchis-cell lane seat-${seat}${last ? ' last' : ''}`}
+              x={point.x - 32} y={point.y - 13.5} width="64" height="27" rx="3" />;
           }))}
+        {targetMoves.map((move) => {
+          const point = tokenPoint(mySeat, move.to, move.piece, state.pieceCount);
+          const steps = state.phase === 'bonus' ? state.bonus : state.dice ?? 0;
+          return <g key={`target-${move.to}`} className="parchis-target">
+            <circle cx={point.x} cy={point.y} r="18" />
+            <text x={point.x} y={point.y + 4}>+{steps}</text>
+          </g>;
+        })}
+        <circle className="parchis-goal-ring" cx="300" cy="300" r="37" />
+        <text className="parchis-goal-star" x="300" y="310">✦</text>
       </svg>
+      {eventLabel && <div key={state.seq} className="parchis-event" aria-hidden="true">{eventLabel}</div>}
       {(['a', 'b'] as const).flatMap((seat) =>
         state.pieces[seat].map((position, index) => {
           const base = tokenPoint(seat, position, index, state.pieceCount);
@@ -338,16 +513,28 @@ function ParchisBoard({
           const point = { x: base.x + stackOffset, y: base.y - stackOffset };
           const mine = seat === mySeat;
           const canMove = mine && movable.has(index);
+          const destination = canMove ? destinations.get(index) : null;
+          const moveSteps = state.phase === 'bonus' ? state.bonus : state.dice;
           const style = { '--piece-x': `${point.x / 6}%`, '--piece-y': `${point.y / 6}%` } as CSSProperties;
           return (
-            <button key={`${seat}-${index}`} type="button" style={style}
+            <button key={`${seat}-${index}`} ref={(node) => {
+              if (node) pieceRefs.current.set(`${seat}-${index}`, node);
+              else pieceRefs.current.delete(`${seat}-${index}`);
+            }} type="button" style={style}
               className={`parchis-piece seat-${seat}${canMove ? ' can-move' : ''}`}
               disabled={!canMove || disabled} onClick={() => onPiece(index)}
-              aria-label={`${mine ? 'Tu' : 'Su'} ficha ${index + 1}, ${positionLabel(seat, position)}${canMove ? ', se puede mover' : ''}`}>
+              aria-label={`${mine ? 'Tu' : 'Su'} ficha ${index + 1}, ${positionLabel(seat, position)}${
+                destination && moveSteps
+                  ? `, mover ${moveSteps} pasos hasta ${positionLabel(seat, destination.to)}`
+                  : canMove ? ', se puede mover' : ''
+              }`}>
               <span>{index + 1}</span>
             </button>
           );
         }))}
+      <span className="sr-only" aria-live="polite">
+        {eventLabel ? `${state.last?.seat === mySeat ? 'Tú' : 'Tu pareja'}: ${eventLabel}` : ''}
+      </span>
     </div>
   );
 }

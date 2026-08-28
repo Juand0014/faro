@@ -292,13 +292,15 @@ label{display:block;font-size:13px;color:var(--lo);margin-top:14px}
 }
 
 /* Parchís */
-.parchis-wrap{max-width:560px}
+.parchis-wrap{max-width:620px}
 .parchis-heading{display:flex;align-items:center;justify-content:space-between;margin-top:8px}
 .parchis-heading .title,.parchis-heading p{margin:0}
 .parchis-turn-dot{width:34px;height:34px;border-radius:50%;border:4px solid rgba(255,255,255,.75);
   box-shadow:0 4px 14px rgba(0,0,0,.25)}
-.parchis-turn-dot.seat-a,.parchis-piece.seat-a span,.parchis-goals.seat-a i.home{background:var(--her)}
-.parchis-turn-dot.seat-b,.parchis-piece.seat-b span,.parchis-goals.seat-b i.home{background:var(--him)}
+.parchis-turn-dot.seat-a,.parchis-piece.seat-a span,.parchis-goals.seat-a i.home,
+.parchis-player.seat-a .parchis-player-token{background:#d94f67}
+.parchis-turn-dot.seat-b,.parchis-piece.seat-b span,.parchis-goals.seat-b i.home,
+.parchis-player.seat-b .parchis-player-token{background:#23809a}
 .parchis-start{text-align:center}
 .parchis-start fieldset{border:0;padding:0;margin:20px 0}
 .parchis-start legend{width:100%;margin-bottom:10px;color:var(--lo);font-size:13px}
@@ -309,43 +311,91 @@ label{display:block;font-size:13px;color:var(--lo);margin-top:14px}
 .parchis-piece:focus-visible,.parchis-die:focus-visible,.parchis-count button:focus-visible,
 .game-reaction-picker button:focus-visible,.parchis-wrap .btn:focus-visible,
 .parchis-help summary:focus-visible{outline:3px solid #fff;outline-offset:2px}
-.parchis-board{position:relative;width:100%;aspect-ratio:1;margin:14px auto;border-radius:28px;
-  overflow:hidden;box-shadow:0 18px 38px rgba(0,0,0,.3)}
+.parchis-status{display:flex;align-items:center;justify-content:center;gap:8px;margin:12px 0 8px;padding:10px 14px;
+  border:1px solid var(--line);border-radius:999px;background:rgba(14,17,34,.75);font-size:13px;font-weight:750}
+.parchis-status.seat-a span{color:#ee7890}.parchis-status.seat-b span{color:#59b3c9}
+.parchis-board{position:relative;width:100%;aspect-ratio:1;margin:14px auto 18px;border-radius:32px;
+  overflow:hidden;isolation:isolate;background:#70452c;box-shadow:0 24px 50px rgba(0,0,0,.42),0 3px 0 #3b241a,
+  inset 0 0 0 1px rgba(255,255,255,.18)}
+.parchis-board::after{content:"";position:absolute;inset:7px;border-radius:26px;pointer-events:none;z-index:8;
+  box-shadow:inset 0 2px 1px rgba(255,255,255,.28),inset 0 -5px 9px rgba(55,29,17,.35)}
 .parchis-board svg{display:block;width:100%;height:100%}
-.parchis-paper{fill:#f3e9d5;stroke:#d8c9aa;stroke-width:4}
-.parchis-yard{stroke-width:4}.parchis-yard.yard-a{fill:rgba(210,79,118,.24);stroke:#d24f76}
-.parchis-yard.yard-b{fill:rgba(44,109,128,.24);stroke:#2c6d80}
-.parchis-center{fill:#f2b357;opacity:.38;stroke:#c98525;stroke-width:3}
-.parchis-cell{fill:#fff9ea;stroke:#b9aa8d;stroke-width:2}
-.parchis-cell.safe{fill:#f4ca82;stroke:#b87720;stroke-width:3}
-.parchis-cell.start-a{fill:#f4adc2;stroke:#b73760;stroke-width:4}
-.parchis-cell.start-b{fill:#8fc5d1;stroke:#205e71;stroke-width:4}
-.parchis-cell.last{stroke:#fff;stroke-width:6;filter:drop-shadow(0 0 5px #f2b357)}
-.parchis-cell.lane.seat-a{fill:#f4adc2;stroke:#b73760}.parchis-cell.lane.seat-b{fill:#8fc5d1;stroke:#205e71}
+.parchis-wood{stroke:#3d2518;stroke-width:4}.parchis-paper{stroke:#c5ad88;stroke-width:2}
+.parchis-home rect{stroke-width:2;filter:drop-shadow(0 3px 3px rgba(45,25,16,.28))}.parchis-home>circle:first-of-type{fill:#fff9ed;stroke:#fff;stroke-width:5}
+.parchis-home>circle:nth-of-type(2){fill:none;stroke:rgba(78,47,30,.2);stroke-width:2;stroke-dasharray:5 5}
+.home-a rect{fill:#a83250;stroke:#79243a}.home-b rect{fill:#185e72;stroke:#104454}
+.home-blue rect{fill:#315b8e;stroke:#24466f}.home-green rect{fill:#6f8a50;stroke:#52683b}
+.parchis-center{stroke:#6e5740;stroke-width:1.4}.center-a{fill:#d9556d}.center-b{fill:#2a8299}
+.center-blue{fill:#6382a9}.center-green{fill:#8b9b6e}
+.parchis-cell{fill:#fffaf0;stroke:#8f7b63;stroke-width:1.2}
+.parchis-cell.safe{fill:#c9c0b1;stroke:#695c4e;stroke-width:2.2}
+.parchis-cell.start-a{fill:#f3a9b7;stroke:#a8344b;stroke-width:2.5}
+.parchis-cell.start-b{fill:#8dc8d5;stroke:#17677d;stroke-width:2.5}
+.parchis-cell.last{stroke:#fff;stroke-width:4;filter:drop-shadow(0 0 6px #f2b357)}
+.parchis-cell.lane.seat-a{fill:#f1a4b3;stroke:#a8344b}.parchis-cell.lane.seat-b{fill:#88c5d3;stroke:#17677d}
+.parchis-goal-ring{fill:#fff8e9;stroke:#7a6248;stroke-width:3}.parchis-goal-star{fill:#cf9b42;text-anchor:middle;
+  font:700 28px/1 serif}
+.parchis-target circle{fill:rgba(255,232,160,.6);stroke:#7c591d;stroke-width:3;stroke-dasharray:5 3;
+  transform-box:fill-box;transform-origin:center;animation:parchis-target 1.15s ease-in-out infinite}
+.parchis-target text{fill:#5c3c12;text-anchor:middle;font:900 10px/1 var(--sans)}
+@keyframes parchis-target{50%{transform:scale(1.12);opacity:.72}}
 .parchis-piece{position:absolute;left:var(--piece-x);top:var(--piece-y);width:44px;height:44px;padding:0;
   transform:translate(-50%,-50%);border:0;border-radius:50%;background:transparent;color:#fff;font:900 10px/1 var(--sans);
-  display:grid;place-items:center;z-index:2;transition:left .3s ease,top .3s ease,transform .18s ease}
-.parchis-piece span{width:24px;height:24px;display:grid;place-items:center;border:2px solid #fff;border-radius:50%;
-  box-shadow:0 3px 7px rgba(0,0,0,.38)}
+  display:grid;place-items:center;z-index:9;transition:transform .18s ease}
+.parchis-piece span{position:relative;width:26px;height:26px;display:grid;place-items:center;border:2px solid rgba(255,255,255,.9);
+  border-radius:50%;box-shadow:inset 0 6px 6px rgba(255,255,255,.28),inset 0 -6px 7px rgba(0,0,0,.23),
+  0 3px 0 rgba(71,37,23,.45),0 7px 9px rgba(0,0,0,.34)}
+.parchis-piece span::after{content:"";position:absolute;top:3px;left:5px;width:8px;height:4px;border-radius:50%;
+  background:rgba(255,255,255,.45);transform:rotate(-24deg)}
 .parchis-piece.seat-b span{border-style:dashed}
-.parchis-piece:disabled{opacity:1;pointer-events:none}.parchis-piece.can-move{cursor:pointer;z-index:3;pointer-events:auto;
+.parchis-piece:disabled{opacity:1;pointer-events:none}.parchis-piece.can-move{cursor:pointer;z-index:10;pointer-events:auto;
   animation:parchis-ready 1s ease-in-out infinite}
-.parchis-piece.can-move span{box-shadow:0 0 0 5px rgba(242,179,87,.45),0 5px 12px rgba(0,0,0,.4)}
+.parchis-piece.can-move span{box-shadow:0 0 0 5px rgba(255,211,111,.6),inset 0 6px 6px rgba(255,255,255,.3),
+  inset 0 -6px 7px rgba(0,0,0,.2),0 5px 12px rgba(0,0,0,.42)}
 .parchis-piece.can-move:active{transform:translate(-50%,-50%) scale(.9)}
-@keyframes parchis-ready{50%{transform:translate(-50%,-50%) translateY(-4px)}}
-.parchis-hud{position:sticky;top:8px;z-index:12;display:grid;grid-template-columns:1fr auto 1fr;
-  align-items:center;gap:14px;padding:10px 14px;backdrop-filter:blur(12px)}
+@keyframes parchis-ready{50%{transform:translate(-50%,-50%) scale(1.06)}}
+.parchis-event{position:absolute;left:50%;top:46%;z-index:15;transform:translate(-50%,-50%);padding:10px 16px;
+  border:1px solid rgba(255,255,255,.7);border-radius:999px;background:rgba(21,17,19,.88);color:#ffe0a3;
+  font:900 17px/1 var(--sans);white-space:nowrap;pointer-events:none;animation:parchis-event 1.35s ease-out forwards}
+@keyframes parchis-event{0%{opacity:0;transform:translate(-50%,-35%) scale(.55)}18%{opacity:1;transform:translate(-50%,-50%) scale(1.08)}
+  70%{opacity:1}100%{opacity:0;transform:translate(-50%,-85%) scale(1)}}
+.parchis-board.capture-event{animation:parchis-capture .42s ease-out}
+@keyframes parchis-capture{35%{transform:translateX(-3px) rotate(-.25deg)}70%{transform:translateX(3px) rotate(.25deg)}}
+.parchis-hud{position:sticky;top:8px;z-index:12;display:grid;grid-template-columns:1fr 104px 1fr;
+  align-items:center;gap:10px;padding:10px;background:rgba(17,19,35,.9);backdrop-filter:blur(14px);
+  border-color:rgba(255,255,255,.13);box-shadow:0 12px 30px rgba(0,0,0,.25)}
 .parchis-pass{margin:-4px 0 12px}
-.parchis-score{display:flex;flex-direction:column;gap:10px;font-size:11px;color:var(--lo)}
+.parchis-player{min-width:0;padding:7px;border:1px solid transparent;border-radius:14px;color:var(--lo);font-size:10px}
+.parchis-player.active{border-color:rgba(255,255,255,.18);background:rgba(255,255,255,.06)}
+.parchis-player-token{display:inline-block;width:12px;height:12px;margin-right:5px;border:2px solid #fff;border-radius:50%;
+  vertical-align:-2px;box-shadow:0 2px 4px rgba(0,0,0,.35)}
+.parchis-player-name{color:var(--hi);font-weight:850}.parchis-player small{display:block;margin-top:5px;color:#c8cde1;
+  font-size:11px;white-space:nowrap}
 .parchis-goals{display:flex;gap:4px;margin-top:4px}.parchis-goals i{width:12px;height:12px;border:1px solid var(--dim);border-radius:50%}
 .parchis-goals i.home{border-color:#fff}
-.parchis-die{width:104px;min-height:84px;border:1px solid rgba(242,179,87,.55);border-radius:20px;
-  background:linear-gradient(160deg,#242948,#111426);color:var(--hi);display:grid;place-items:center;padding:5px;cursor:pointer}
-.parchis-die>span{font-size:44px;line-height:1}.parchis-die small{font-weight:800;color:var(--gold)}
-.parchis-die:disabled{opacity:.7;cursor:default}.parchis-six{text-align:right;color:var(--lo);font-size:10px}
-.parchis-six>div{display:flex;justify-content:flex-end;gap:5px;margin-top:5px}
-.parchis-six i{display:block;width:9px;height:9px;border-radius:50%;background:var(--line)}.parchis-six i.on{background:var(--gold)}
+.parchis-die{width:104px;min-height:92px;border:1px solid rgba(242,179,87,.48);border-radius:19px;
+  background:linear-gradient(160deg,#2a2e49,#101321);color:var(--hi);display:grid;place-items:center;padding:7px;cursor:pointer;
+  box-shadow:inset 0 1px rgba(255,255,255,.12),0 8px 16px rgba(0,0,0,.24)}
+.parchis-die-cube{width:48px;height:48px;padding:9px;display:grid!important;grid-template-columns:repeat(3,1fr);
+  grid-template-rows:repeat(3,1fr);gap:4px;border-radius:12px;background:linear-gradient(145deg,#fffdf7,#d8cfbf);
+  position:relative;box-shadow:inset 0 2px 2px #fff,0 5px 0 #9c917e,0 9px 13px rgba(0,0,0,.34);transform:rotate(-3deg)}
+.parchis-die-cube i{width:7px;height:7px;align-self:center;justify-self:center;border-radius:50%;background:#20212a;
+  opacity:0;box-shadow:inset 0 1px 1px rgba(255,255,255,.25)}.parchis-die-cube i.visible{opacity:1}
+.parchis-die-cube b{position:absolute;inset:0;display:grid;place-items:center;color:#4b443b;font:900 24px/1 var(--sans)}
+.parchis-die-cube.bonus{background:linear-gradient(145deg,#fff0ba,#d8aa4c);box-shadow:inset 0 2px 2px #fff6d7,
+  0 5px 0 #8f6724,0 9px 13px rgba(0,0,0,.34)}.parchis-die-cube.bonus b{font-size:18px;color:#4f3210}
+.parchis-die-cube.rolling{animation:parchis-roll .72s cubic-bezier(.3,.7,.25,1) infinite}
+@keyframes parchis-roll{0%{transform:translateY(0) rotate(-3deg)}35%{transform:translateY(-12px) rotate(145deg) scale(.92)}
+  70%{transform:translateY(1px) rotate(285deg) scale(1.04)}100%{transform:translateY(0) rotate(357deg)}}
+.parchis-die small{font-weight:850;color:var(--gold)}.parchis-die:disabled{opacity:.74;cursor:default}
+.parchis-streak{display:flex;align-items:center;justify-content:center;gap:8px;margin:-7px auto 7px;color:var(--lo);font-size:10px}
+.parchis-streak>div{display:flex;gap:5px}.parchis-streak i{display:block;width:8px;height:8px;border-radius:50%;background:var(--line)}
+.parchis-streak i.on{background:var(--gold);box-shadow:0 0 7px rgba(242,179,87,.65)}
 .parchis-help summary{cursor:pointer;font-weight:750}.parchis-help ul{padding-left:20px;color:var(--lo);font-size:13px;line-height:1.55}
+@media (max-width:390px){
+  .parchis-hud{grid-template-columns:1fr 88px 1fr;gap:5px;padding:7px}.parchis-die{width:88px}
+  .parchis-player{padding:5px}.parchis-player small{font-size:10px;white-space:normal}.parchis-die-cube{width:43px;height:43px}
+}
 
 /* Reacciones efímeras para juegos */
 .game-reactions{position:relative;margin:14px 0}
@@ -367,8 +417,10 @@ label{display:block;font-size:13px;color:var(--lo);margin-top:14px}
   75%{opacity:1}100%{opacity:0;transform:translate(-50%,-58vh) scale(1.45) rotate(-4deg)}
 }
 @media (prefers-reduced-motion:reduce){
-  .parchis-piece,.parchis-piece.can-move{animation:none;transition:none}
+  .parchis-piece,.parchis-piece.can-move,.parchis-target circle{animation:none;transition:none}
   .parchis-piece.can-move:active{transform:translate(-50%,-50%)}
+  .parchis-die-cube.rolling,.parchis-board.capture-event{animation:none}
+  .parchis-event{animation:reaction-static 1.35s ease forwards}
   .game-reaction-burst{top:45%;bottom:auto;transform:translateX(-50%);animation:reaction-static 3.2s ease forwards}
 }
 @keyframes reaction-static{0%,80%{opacity:1}100%{opacity:0}}
