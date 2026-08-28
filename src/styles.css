@@ -290,3 +290,85 @@ label{display:block;font-size:13px;color:var(--lo);margin-top:14px}
   .ws-wrap{padding-left:10px;padding-right:10px}
   .ws-board{padding:3px}.ws-board [role="gridcell"]{font-size:10px}
 }
+
+/* Parchís */
+.parchis-wrap{max-width:560px}
+.parchis-heading{display:flex;align-items:center;justify-content:space-between;margin-top:8px}
+.parchis-heading .title,.parchis-heading p{margin:0}
+.parchis-turn-dot{width:34px;height:34px;border-radius:50%;border:4px solid rgba(255,255,255,.75);
+  box-shadow:0 4px 14px rgba(0,0,0,.25)}
+.parchis-turn-dot.seat-a,.parchis-piece.seat-a span,.parchis-goals.seat-a i.home{background:var(--her)}
+.parchis-turn-dot.seat-b,.parchis-piece.seat-b span,.parchis-goals.seat-b i.home{background:var(--him)}
+.parchis-start{text-align:center}
+.parchis-start fieldset{border:0;padding:0;margin:20px 0}
+.parchis-start legend{width:100%;margin-bottom:10px;color:var(--lo);font-size:13px}
+.parchis-count{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.parchis-count button{min-height:52px;border:1px solid var(--line);border-radius:15px;background:#0e1122;
+  color:var(--hi);font:800 18px/1 var(--sans)}
+.parchis-count button.selected{border-color:var(--gold);color:var(--gold);box-shadow:0 0 0 3px rgba(242,179,87,.13)}
+.parchis-piece:focus-visible,.parchis-die:focus-visible,.parchis-count button:focus-visible,
+.game-reaction-picker button:focus-visible,.parchis-wrap .btn:focus-visible,
+.parchis-help summary:focus-visible{outline:3px solid #fff;outline-offset:2px}
+.parchis-board{position:relative;width:100%;aspect-ratio:1;margin:14px auto;border-radius:28px;
+  overflow:hidden;box-shadow:0 18px 38px rgba(0,0,0,.3)}
+.parchis-board svg{display:block;width:100%;height:100%}
+.parchis-paper{fill:#f3e9d5;stroke:#d8c9aa;stroke-width:4}
+.parchis-yard{stroke-width:4}.parchis-yard.yard-a{fill:rgba(210,79,118,.24);stroke:#d24f76}
+.parchis-yard.yard-b{fill:rgba(44,109,128,.24);stroke:#2c6d80}
+.parchis-center{fill:#f2b357;opacity:.38;stroke:#c98525;stroke-width:3}
+.parchis-cell{fill:#fff9ea;stroke:#b9aa8d;stroke-width:2}
+.parchis-cell.safe{fill:#f4ca82;stroke:#b87720;stroke-width:3}
+.parchis-cell.start-a{fill:#f4adc2;stroke:#b73760;stroke-width:4}
+.parchis-cell.start-b{fill:#8fc5d1;stroke:#205e71;stroke-width:4}
+.parchis-cell.last{stroke:#fff;stroke-width:6;filter:drop-shadow(0 0 5px #f2b357)}
+.parchis-cell.lane.seat-a{fill:#f4adc2;stroke:#b73760}.parchis-cell.lane.seat-b{fill:#8fc5d1;stroke:#205e71}
+.parchis-piece{position:absolute;left:var(--piece-x);top:var(--piece-y);width:44px;height:44px;padding:0;
+  transform:translate(-50%,-50%);border:0;border-radius:50%;background:transparent;color:#fff;font:900 10px/1 var(--sans);
+  display:grid;place-items:center;z-index:2;transition:left .3s ease,top .3s ease,transform .18s ease}
+.parchis-piece span{width:24px;height:24px;display:grid;place-items:center;border:2px solid #fff;border-radius:50%;
+  box-shadow:0 3px 7px rgba(0,0,0,.38)}
+.parchis-piece.seat-b span{border-style:dashed}
+.parchis-piece:disabled{opacity:1;pointer-events:none}.parchis-piece.can-move{cursor:pointer;z-index:3;pointer-events:auto;
+  animation:parchis-ready 1s ease-in-out infinite}
+.parchis-piece.can-move span{box-shadow:0 0 0 5px rgba(242,179,87,.45),0 5px 12px rgba(0,0,0,.4)}
+.parchis-piece.can-move:active{transform:translate(-50%,-50%) scale(.9)}
+@keyframes parchis-ready{50%{transform:translate(-50%,-50%) translateY(-4px)}}
+.parchis-hud{position:sticky;top:8px;z-index:12;display:grid;grid-template-columns:1fr auto 1fr;
+  align-items:center;gap:14px;padding:10px 14px;backdrop-filter:blur(12px)}
+.parchis-pass{margin:-4px 0 12px}
+.parchis-score{display:flex;flex-direction:column;gap:10px;font-size:11px;color:var(--lo)}
+.parchis-goals{display:flex;gap:4px;margin-top:4px}.parchis-goals i{width:12px;height:12px;border:1px solid var(--dim);border-radius:50%}
+.parchis-goals i.home{border-color:#fff}
+.parchis-die{width:104px;min-height:84px;border:1px solid rgba(242,179,87,.55);border-radius:20px;
+  background:linear-gradient(160deg,#242948,#111426);color:var(--hi);display:grid;place-items:center;padding:5px;cursor:pointer}
+.parchis-die>span{font-size:44px;line-height:1}.parchis-die small{font-weight:800;color:var(--gold)}
+.parchis-die:disabled{opacity:.7;cursor:default}.parchis-six{text-align:right;color:var(--lo);font-size:10px}
+.parchis-six>div{display:flex;justify-content:flex-end;gap:5px;margin-top:5px}
+.parchis-six i{display:block;width:9px;height:9px;border-radius:50%;background:var(--line)}.parchis-six i.on{background:var(--gold)}
+.parchis-help summary{cursor:pointer;font-weight:750}.parchis-help ul{padding-left:20px;color:var(--lo);font-size:13px;line-height:1.55}
+
+/* Reacciones efímeras para juegos */
+.game-reactions{position:relative;margin:14px 0}
+.game-reaction-picker{display:flex;gap:7px;padding:8px;overflow-x:auto;scrollbar-width:none;border:1px solid var(--line);
+  border-radius:18px;background:rgba(14,17,34,.84)}
+.game-reaction-picker::-webkit-scrollbar{display:none}
+.game-reaction-picker button{flex:0 0 46px;width:46px;height:46px;border:1px solid rgba(255,255,255,.08);
+  border-radius:14px;background:rgba(255,255,255,.06);font-size:24px;cursor:pointer}
+.game-reaction-picker button:active{transform:scale(.88)}
+.game-reactions.celebrating .game-reaction-picker{border-color:var(--gold);box-shadow:0 0 22px rgba(242,179,87,.2)}
+.game-reaction-bursts{position:fixed;inset:0;z-index:85;pointer-events:none;overflow:hidden}
+.game-reaction-burst{position:absolute;left:50%;bottom:20%;font-size:54px;filter:drop-shadow(0 8px 8px rgba(0,0,0,.35));
+  animation:reaction-float 3.2s cubic-bezier(.2,.8,.2,1) forwards}
+.game-reaction-burst.drift-1{left:36%;animation-delay:.04s}.game-reaction-burst.drift-2{left:64%;animation-delay:.08s}
+.game-reaction-burst.drift-3{left:44%;animation-delay:.12s}
+@keyframes reaction-float{
+  0%{opacity:0;transform:translate(-50%,30px) scale(.6) rotate(-8deg)}
+  12%{opacity:1;transform:translate(-50%,0) scale(1.15) rotate(5deg)}
+  75%{opacity:1}100%{opacity:0;transform:translate(-50%,-58vh) scale(1.45) rotate(-4deg)}
+}
+@media (prefers-reduced-motion:reduce){
+  .parchis-piece,.parchis-piece.can-move{animation:none;transition:none}
+  .parchis-piece.can-move:active{transform:translate(-50%,-50%)}
+  .game-reaction-burst{top:45%;bottom:auto;transform:translateX(-50%);animation:reaction-static 3.2s ease forwards}
+}
+@keyframes reaction-static{0%,80%{opacity:1}100%{opacity:0}}

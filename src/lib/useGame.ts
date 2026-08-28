@@ -7,6 +7,7 @@ import { initialHangState } from './hangman';
 import { initialPictionaryState } from './pictionary';
 import { initialBattleshipState } from './battleship';
 import { initialWordSearchState } from './wordSearch';
+import { initialParchisState } from './parchis';
 
 export type Rematch = { from: string; status: 'pending' | 'accepted' | 'rejected' };
 
@@ -29,6 +30,7 @@ export function freshState(type: string, first: string, prev?: any) {
   if (type === 'draw') return initialPictionaryState(first, prev);
   if (type === 'ships') return initialBattleshipState(first);
   if (type === 'wordsearch') return initialWordSearchState(first, prev?.nextCategory || prev?.category);
+  if (type === 'parchis') return initialParchisState(first, prev?.pieceCount);
   return { board: Array(9).fill(''), first };
 }
 

@@ -335,3 +335,283 @@ end $$;
 
 revoke all on function claim_word_search_word(uuid, text) from public;
 grant execute on function claim_word_search_word(uuid, text) to authenticated;
+
+-- 7) PARCHÍS ------------------------------------------------
+-- El servidor es la fuente del dado y serializa cada acción con FOR UPDATE.
+create or replace function roll_parchis(p_game_id uuid)
+returns games language plpgsql security definer set search_path = public as $$
+declare
+  v_game games%rowtype;
+  v_dice integer;
+  v_streak integer;
+begin
+  if auth.uid() is null then raise exception 'no_autenticado'; end if;
+  perform set_config('app.parchis_rpc', 'on', true);
+  select * into v_game from games
+    where id = p_game_id and couple_id = my_couple_id() and type = 'parchis'
+    for update;
+  if not found then raise exception 'partida_invalida'; end if;
+  if v_game.status <> 'active' or v_game.turn is distinct from auth.uid()
+    or v_game.state->>'phase' <> 'roll' then
+    raise exception 'turno_invalido';
+  end if;
+
+  v_dice := floor(random() * 6)::integer + 1;
+  v_streak := case when v_dice = 6
+    then least(3, coalesce((v_game.state->>'sixStreak')::integer, 0) + 1)
+    else 0 end;
+  v_game.state := jsonb_set(v_game.state, '{phase}', '"move"', false);
+  v_game.state := jsonb_set(v_game.state, '{dice}', to_jsonb(v_dice), false);
+  v_game.state := jsonb_set(v_game.state, '{sixStreak}', to_jsonb(v_streak), false);
+  v_game.state := jsonb_set(v_game.state, '{bonus}', '0', false);
+  v_game.state := jsonb_set(v_game.state, '{bonusChain}', '0', false);
+  v_game.state := jsonb_set(
+    v_game.state, '{seq}', to_jsonb(coalesce((v_game.state->>'seq')::integer, 0) + 1), false
+  );
+
+  update games set state = v_game.state, updated_at = now()
+    where id = v_game.id returning * into v_game;
+  return v_game;
+end $$;
+
+create or replace function pass_parchis(p_game_id uuid, p_expected_seq integer)
+returns games language plpgsql security definer set search_path = public as $$
+declare
+  v_game games%rowtype;
+  v_partner uuid;
+  v_streak integer;
+  v_dice integer;
+begin
+  if auth.uid() is null then raise exception 'no_autenticado'; end if;
+  perform set_config('app.parchis_rpc', 'on', true);
+  select * into v_game from games
+    where id = p_game_id and couple_id = my_couple_id() and type = 'parchis'
+    for update;
+  if not found then raise exception 'partida_invalida'; end if;
+  if v_game.status <> 'active' or v_game.turn is distinct from auth.uid()
+    or v_game.state->>'phase' <> 'move'
+    or coalesce((v_game.state->>'seq')::integer, -1) <> p_expected_seq then
+    raise exception 'estado_desactualizado';
+  end if;
+
+  select id into v_partner from members
+    where couple_id = v_game.couple_id and id <> auth.uid()
+    order by last_seen desc limit 1;
+  if v_partner is null then raise exception 'pareja_no_disponible'; end if;
+  v_dice := coalesce((v_game.state->>'dice')::integer, 0);
+  v_streak := coalesce((v_game.state->>'sixStreak')::integer, 0);
+  v_game.turn := case when v_dice = 6 and v_streak < 3 then auth.uid() else v_partner end;
+  if v_game.turn <> auth.uid() then v_streak := 0; end if;
+
+  v_game.state := jsonb_set(v_game.state, '{phase}', '"roll"', false);
+  v_game.state := jsonb_set(v_game.state, '{dice}', 'null', false);
+  v_game.state := jsonb_set(v_game.state, '{sixStreak}', to_jsonb(v_streak), false);
+  v_game.state := jsonb_set(v_game.state, '{bonus}', '0', false);
+  v_game.state := jsonb_set(v_game.state, '{bonusChain}', '0', false);
+  v_game.state := jsonb_set(v_game.state, '{seq}', to_jsonb(p_expected_seq + 1), false);
+  update games set state = v_game.state, turn = v_game.turn, updated_at = now()
+    where id = v_game.id returning * into v_game;
+  return v_game;
+end $$;
+
+create or replace function move_parchis(
+  p_game_id uuid,
+  p_expected_seq integer,
+  p_piece integer,
+  p_state jsonb,
+  p_next_turn uuid,
+  p_status text,
+  p_winner uuid default null
+)
+returns games language plpgsql security definer set search_path = public as $$
+declare
+  v_game games%rowtype;
+  v_seat text;
+  v_rival text;
+  v_phase text;
+  v_steps integer;
+  v_from integer;
+  v_to integer;
+  v_piece_count integer;
+  v_changed integer;
+  v_partner uuid;
+  v_expected_turn uuid;
+  v_earned_bonus integer;
+  v_bonus_chain integer;
+  v_won boolean;
+begin
+  if auth.uid() is null then raise exception 'no_autenticado'; end if;
+  perform set_config('app.parchis_rpc', 'on', true);
+  select * into v_game from games
+    where id = p_game_id and couple_id = my_couple_id() and type = 'parchis'
+    for update;
+  if not found then raise exception 'partida_invalida'; end if;
+  if v_game.status <> 'active' or v_game.turn is distinct from auth.uid()
+    or coalesce((v_game.state->>'seq')::integer, -1) <> p_expected_seq then
+    raise exception 'estado_desactualizado';
+  end if;
+  v_phase := v_game.state->>'phase';
+  if v_phase not in ('move', 'bonus') then raise exception 'fase_invalida'; end if;
+  if p_status not in ('active', 'won') then raise exception 'estado_final_invalido'; end if;
+
+  v_seat := case when v_game.state->>'first' = auth.uid()::text then 'a' else 'b' end;
+  v_rival := case when v_seat = 'a' then 'b' else 'a' end;
+  v_piece_count := (v_game.state->>'pieceCount')::integer;
+  if not (p_state ?& array[
+      'version', 'first', 'pieceCount', 'phase', 'dice', 'sixStreak',
+      'bonus', 'bonusChain', 'pieces', 'last', 'seq'
+    ])
+    or v_piece_count not in (2, 3, 4)
+    or p_state#>array['pieces', v_seat] is null
+    or p_state#>array['pieces', v_rival] is null
+    or p_piece < 0 or p_piece >= v_piece_count
+    or jsonb_array_length(p_state#>array['pieces', v_seat]) <> v_piece_count
+    or jsonb_array_length(p_state#>array['pieces', v_rival]) <> v_piece_count
+    or p_state->>'first' is distinct from v_game.state->>'first'
+    or p_state->>'pieceCount' is distinct from v_game.state->>'pieceCount'
+    or (p_state->>'seq')::integer is distinct from p_expected_seq + 1 then
+    raise exception 'movimiento_invalido';
+  end if;
+  if exists (
+    select 1 from jsonb_array_elements_text(p_state#>array['pieces', v_seat]) position
+    where position::integer < -1 or position::integer > 75
+  ) or exists (
+    select 1 from jsonb_array_elements_text(p_state#>array['pieces', v_rival]) position
+    where position::integer < -1 or position::integer > 75
+  ) then raise exception 'posicion_invalida'; end if;
+
+  v_steps := case when v_phase = 'bonus'
+    then (v_game.state->>'bonus')::integer else (v_game.state->>'dice')::integer end;
+  v_from := (v_game.state#>>array['pieces', v_seat, p_piece::text])::integer;
+  v_to := (p_state#>>array['pieces', v_seat, p_piece::text])::integer;
+  if not ((v_from = -1 and v_steps = 5 and v_to = 0)
+    or (v_from >= 0 and v_from < 75 and v_to = v_from + v_steps and v_to <= 75)) then
+    raise exception 'distancia_invalida';
+  end if;
+  if p_state#>>'{last,seat}' is distinct from v_seat
+    or (p_state#>>'{last,piece}')::integer <> p_piece
+    or (p_state#>>'{last,from}')::integer <> v_from
+    or (p_state#>>'{last,to}')::integer <> v_to
+    or (p_state#>>'{last,steps}')::integer <> v_steps then
+    raise exception 'resumen_movimiento_invalido';
+  end if;
+
+  select count(*) into v_changed
+    from generate_series(0, v_piece_count - 1) index
+    where index <> p_piece
+      and v_game.state#>>array['pieces', v_seat, index::text]
+        is distinct from p_state#>>array['pieces', v_seat, index::text];
+  if v_changed <> 0 then raise exception 'fichas_propias_invalidas'; end if;
+
+  select count(*) into v_changed
+    from generate_series(0, v_piece_count - 1) index
+    where v_game.state#>>array['pieces', v_rival, index::text]
+      is distinct from p_state#>>array['pieces', v_rival, index::text];
+  if v_changed > 1 then raise exception 'captura_invalida'; end if;
+  if v_changed = 1 and exists (
+    select 1 from generate_series(0, v_piece_count - 1) index
+    where v_game.state#>>array['pieces', v_rival, index::text]
+      is distinct from p_state#>>array['pieces', v_rival, index::text]
+      and (p_state#>>array['pieces', v_rival, index::text])::integer <> -1
+  ) then raise exception 'captura_invalida'; end if;
+
+  select id into v_partner from members
+    where couple_id = v_game.couple_id and id <> auth.uid()
+    order by last_seen desc limit 1;
+  if v_partner is null then raise exception 'pareja_no_disponible'; end if;
+  v_won := not exists (
+    select 1 from jsonb_array_elements_text(p_state#>array['pieces', v_seat]) position
+    where position::integer <> 75
+  );
+  v_earned_bonus := case when v_changed = 1 then 20 when v_to = 75 then 10 else 0 end;
+  v_bonus_chain := coalesce((v_game.state->>'bonusChain')::integer, 0);
+  v_expected_turn := case
+    when v_won then null
+    when v_earned_bonus > 0 and v_bonus_chain < 4 then auth.uid()
+    when (v_game.state->>'dice')::integer = 6
+      and (v_game.state->>'sixStreak')::integer < 3 then auth.uid()
+    else v_partner end;
+
+  if v_won then
+    if p_status <> 'won' or p_winner is distinct from auth.uid()
+      or p_next_turn is not null or p_state->>'phase' <> 'over'
+      or (p_state->>'bonus')::integer is distinct from 0 then
+      raise exception 'victoria_invalida';
+    end if;
+  elsif p_status <> 'active' or p_winner is not null then
+    raise exception 'estado_final_invalido';
+  elsif v_earned_bonus > 0 and v_bonus_chain < 4 then
+    -- El cliente puede perder el bonus si no existe destino legal, pero nunca inventarlo
+    -- ni transferir el turno a una tercera persona.
+    if p_state->>'phase' = 'bonus' then
+      if p_next_turn is distinct from auth.uid()
+        or (p_state->>'bonus')::integer is distinct from v_earned_bonus
+        or (p_state->>'bonusChain')::integer is distinct from v_bonus_chain + 1
+        or p_state->>'dice' is distinct from v_game.state->>'dice'
+        or p_state->>'sixStreak' is distinct from v_game.state->>'sixStreak' then
+        raise exception 'bonus_invalido';
+      end if;
+    elsif p_state->>'phase' = 'roll' then
+      if (p_state->>'bonus')::integer is distinct from 0
+        or (p_state->>'bonusChain')::integer is distinct from 0
+        or p_state->'dice' is distinct from 'null'::jsonb
+        or p_next_turn is distinct from (
+          case when (v_game.state->>'dice')::integer = 6
+            and (v_game.state->>'sixStreak')::integer < 3 then auth.uid() else v_partner end
+        )
+        or (p_state->>'sixStreak')::integer is distinct from (
+          case when p_next_turn = auth.uid()
+            then (v_game.state->>'sixStreak')::integer else 0 end
+        ) then raise exception 'cierre_bonus_invalido'; end if;
+    else raise exception 'fase_siguiente_invalida';
+    end if;
+  else
+    if p_state->>'phase' <> 'roll'
+      or (p_state->>'bonus')::integer is distinct from 0
+      or (p_state->>'bonusChain')::integer is distinct from 0
+      or p_state->'dice' is distinct from 'null'::jsonb
+      or p_next_turn is distinct from v_expected_turn
+      or (p_state->>'sixStreak')::integer is distinct from (
+        case when v_expected_turn = auth.uid()
+          then (v_game.state->>'sixStreak')::integer else 0 end
+      ) then
+      raise exception 'turno_siguiente_invalido';
+    end if;
+  end if;
+
+  update games set state = p_state, turn = p_next_turn, status = p_status,
+    winner = p_winner, updated_at = now()
+    where id = v_game.id returning * into v_game;
+  return v_game;
+end $$;
+
+revoke all on function roll_parchis(uuid) from public;
+revoke all on function pass_parchis(uuid, integer) from public;
+revoke all on function move_parchis(uuid, integer, integer, jsonb, uuid, text, uuid) from public;
+grant execute on function roll_parchis(uuid) to authenticated;
+grant execute on function pass_parchis(uuid, integer) to authenticated;
+grant execute on function move_parchis(uuid, integer, integer, jsonb, uuid, text, uuid) to authenticated;
+
+create or replace function guard_parchis_direct_update()
+returns trigger language plpgsql security invoker set search_path = public as $$
+begin
+  if old.type = 'parchis'
+    and current_setting('app.parchis_rpc', true) is distinct from 'on'
+    and current_role not in ('postgres', 'service_role') then
+    if old.status = 'active' and new.status = 'abandoned' then
+      return new;
+    end if;
+    if old.status <> 'active' and new.status = old.status
+      and new.turn is not distinct from old.turn
+      and new.winner is not distinct from old.winner
+      and (new.state - 'rematch') = (old.state - 'rematch') then
+      return new;
+    end if;
+    raise exception 'usa_rpc_parchis';
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists guard_parchis_direct_update_trigger on games;
+create trigger guard_parchis_direct_update_trigger
+before update on games for each row execute function guard_parchis_direct_update();
