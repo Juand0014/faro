@@ -265,30 +265,41 @@ label{display:block;font-size:13px;color:var(--lo);margin-top:14px}
   border:1px solid var(--line);border-radius:14px;background:#0e1122}
 .ws-score .me{border-color:rgba(44,109,128,.75)}.ws-score .partner{border-color:rgba(210,79,118,.7)}
 .ws-score span{color:var(--lo);font-size:12px;font-weight:750}.ws-score strong{font-size:25px;color:var(--hi)}
-.ws-board-scroll{max-width:100%;overflow-x:auto;padding:3px}
-.ws-board{display:grid;width:100%;min-width:350px;aspect-ratio:1;overflow:hidden;padding:5px;border:1px solid rgba(242,179,87,.55);
-  border-radius:16px;background:#f7f1e7;touch-action:none;user-select:none;box-shadow:0 16px 38px rgba(0,0,0,.24)}
+.ws-size{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 10px;padding:0;border:0}
+.ws-size legend{width:100%;margin-bottom:8px;color:var(--lo);font-size:12px;font-weight:750}
+.ws-size button{flex:1 1 90px;min-height:44px;padding:0 10px;border:1px solid var(--line);border-radius:13px;
+  background:#0e1122;color:var(--hi);font:750 13px/1 var(--sans);cursor:pointer}
+.ws-size button.selected{border-color:var(--gold);color:var(--gold);box-shadow:0 0 0 3px rgba(242,179,87,.13)}
+.ws-size button:focus-visible{outline:3px solid #fff;outline-offset:2px}
+.ws-board-scroll{max-width:100%;overflow:auto;padding:3px;overscroll-behavior-x:contain}
+.ws-board{display:grid;padding:5px;border:1px solid rgba(242,179,87,.55);
+  border-radius:16px;background:#f7f1e7;user-select:none;box-shadow:0 16px 38px rgba(0,0,0,.24)}
+.ws-board.fit{width:100%;aspect-ratio:1;grid-template-columns:repeat(var(--ws-size),1fr);touch-action:none}
+.ws-board.zoom{width:max-content;grid-template-columns:repeat(var(--ws-size),var(--ws-cell));
+  grid-auto-rows:var(--ws-cell);touch-action:pan-x pan-y}
 .ws-board:focus-visible{outline:3px solid #fff;outline-offset:3px}
 .ws-board .ws-row{display:contents}
-.ws-board [role="gridcell"]{display:grid;place-items:center;position:relative;min-width:0;color:#302530;
-  font:800 clamp(11px,3.2vw,17px)/1 ui-monospace,'Cascadia Mono',monospace;border-radius:50%}
+.ws-board [role="gridcell"]{display:grid;place-items:center;position:relative;min-width:0;color:#241a24;
+  font:850 clamp(0.95rem,4.1vw,1.4rem)/1 ui-monospace,'Cascadia Mono',monospace;border-radius:50%}
+.ws-board.zoom [role="gridcell"]{font-size:calc(var(--ws-cell) * .58)}
 .ws-board [role="gridcell"].selected{background:#f2b357;color:#251a25}
 .ws-board [role="gridcell"].found-me{background:#2c6d80;color:#fff}
 .ws-board [role="gridcell"].found-partner{background:#b93663;color:#fff}
-.ws-board [role="gridcell"].cursor::after{content:'';position:absolute;inset:2px;border:2px solid #171b33;
-  border-radius:50%;opacity:0}
+.ws-board [role="gridcell"].cursor::after{content:'';position:absolute;inset:2px;border:2px solid #fff;
+  border-radius:50%;box-shadow:0 0 0 2px #171b33;opacity:0}
 .ws-board:focus [role="gridcell"].cursor::after{opacity:1}
-.ws-message{min-height:24px;margin:9px 0 0;color:var(--gold);font-size:13px;font-weight:750;text-align:center}
+.ws-message{min-height:22px;margin:9px 0 0;color:var(--gold);font-size:14px;font-weight:750;text-align:center}
+.ws-hint{margin:4px 0 0;color:var(--lo);font-size:12px;text-align:center}
 .ws-words{margin-top:12px}.ws-words h2{margin:0 0 10px;font-size:13px;color:var(--lo);text-transform:uppercase;letter-spacing:.1em}
 .ws-words>ul{display:flex;flex-wrap:wrap;gap:7px;margin:0;padding:0;list-style:none}
-.ws-words li{display:inline-flex;align-items:center;gap:5px;padding:6px 9px;border:1px solid var(--line);
-  border-radius:20px;color:var(--hi);font:750 11px/1 var(--sans)}
+.ws-words li{display:inline-flex;align-items:center;gap:5px;padding:7px 11px;border:1px solid var(--line);
+  border-radius:20px;color:var(--hi);font:750 14px/1.2 var(--sans)}
 .ws-words li.mine{border-color:#4aa0ba;background:rgba(44,109,128,.24);text-decoration:line-through}
 .ws-words li.theirs{border-color:#e17899;background:rgba(210,79,118,.2);text-decoration:line-through}
-.ws-words small{color:var(--lo);font-size:9px;text-decoration:none}
+.ws-words small{color:var(--lo);font-size:11px;text-decoration:none}
 @media (max-width:380px){
   .ws-wrap{padding-left:10px;padding-right:10px}
-  .ws-board{padding:3px}.ws-board [role="gridcell"]{font-size:10px}
+  .ws-board{padding:3px}
 }
 
 /* Parchís */

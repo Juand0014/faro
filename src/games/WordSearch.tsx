@@ -1,6 +1,6 @@
 import {
   useCallback, useEffect, useMemo, useRef, useState,
-  type KeyboardEvent, type PointerEvent,
+  type CSSProperties, type KeyboardEvent, type PointerEvent,
 } from 'react';
 import RematchPanel from '../components/RematchPanel';
 import StopMatchPanel from '../components/StopMatchPanel';
@@ -15,8 +15,25 @@ import { WORD_CATEGORIES, WORD_COUNT, wordCategory } from '../lib/wordSearchWord
 
 const cellKey = ({ row, col }: WordCell) => `${row}:${col}`;
 
+const LETTER_SIZES = [
+  { id: 'fit', label: 'Ajustado', cell: 'auto' },
+  { id: 'big', label: 'Grande', cell: '2.3rem' },
+  { id: 'max', label: 'Muy grande', cell: '3.1rem' },
+] as const;
+type LetterSize = typeof LETTER_SIZES[number]['id'];
+const SIZE_KEY = 'faro-ws-letter-size';
+
+function storedLetterSize(): LetterSize {
+  try {
+    const saved = localStorage.getItem(SIZE_KEY);
+    if (LETTER_SIZES.some((option) => option.id === saved)) return saved as LetterSize;
+  } catch { /* private mode keeps the default */ }
+  return 'big';
+}
+
 export default function WordSearch({ me, partnerId }: { me: Member; partnerId: string | null }) {
   const [category, setCategory] = useState('aeropuertos');
+  const [letterSize, setLetterSize] = useState<LetterSize>(storedLetterSize);
   const [selection, setSelection] = useState<{ start: WordCell; end: WordCell } | null>(null);
   const [cursor, setCursor] = useState<WordCell>({ row: 0, col: 0 });
   const [keyboardStart, setKeyboardStart] = useState<WordCell | null>(null);
@@ -24,7 +41,10 @@ export default function WordSearch({ me, partnerId }: { me: Member; partnerId: s
   const [busy, setBusy] = useState(false);
   const [names, setNames] = useState<Record<string, string>>({});
   const boardRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef<{ start: WordCell; end: WordCell; pointer: number } | null>(null);
+  const dragRef = useRef<{
+    start: WordCell; end: WordCell; pointer: number;
+    anchor: WordCell | null; dragging: boolean; moved: boolean;
+  } | null>(null);
   const makeInitialState = useCallback(
     () => initialWordSearchState(me.id, category),
     [me.id, category],
@@ -46,6 +66,10 @@ export default function WordSearch({ me, partnerId }: { me: Member; partnerId: s
     })();
     return () => { alive = false; };
   }, [me.couple_id]);
+
+  useEffect(() => {
+    try { localStorage.setItem(SIZE_KEY, letterSize); } catch { /* nothing to persist */ }
+  }, [letterSize]);
 
   const state = isWordSearchState(game?.state) ? game.state : null;
   useEffect(() => {
@@ -77,8 +101,14 @@ export default function WordSearch({ me, partnerId }: { me: Member; partnerId: s
   }, [puzzle, state?.found]);
 
   function pointFromPointer(event: PointerEvent<HTMLDivElement>) {
+    if (!state) return null;
+    const target = document.elementFromPoint(event.clientX, event.clientY);
+    const cell = target instanceof Element ? target.closest<HTMLElement>('[data-row]') : null;
+    if (cell?.dataset.row && cell.dataset.col) {
+      return { row: Number(cell.dataset.row), col: Number(cell.dataset.col) };
+    }
     const rect = boardRef.current?.getBoundingClientRect();
-    if (!rect || !state) return null;
+    if (!rect) return null;
     const col = Math.max(0, Math.min(state.size - 1,
       Math.floor((event.clientX - rect.left) / rect.width * state.size)));
     const row = Math.max(0, Math.min(state.size - 1,
@@ -90,10 +120,16 @@ export default function WordSearch({ me, partnerId }: { me: Member; partnerId: s
     if (!state || game?.status !== 'active' || busy) return;
     const point = pointFromPointer(event);
     if (!point) return;
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    dragRef.current = { start: point, end: point, pointer: event.pointerId };
-    setSelection({ start: point, end: point });
+    // An enlarged board must stay pannable, so touch drags only select when it fits the screen.
+    const dragging = event.pointerType !== 'touch' || letterSize === 'fit';
+    if (event.pointerType !== 'touch') event.preventDefault();
+    if (dragging) event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = {
+      start: point, end: point, pointer: event.pointerId,
+      anchor: keyboardStart, dragging, moved: false,
+    };
+    setKeyboardStart(null);
+    if (dragging) setSelection({ start: point, end: point });
   }
 
   function pointerMove(event: PointerEvent<HTMLDivElement>) {
@@ -101,6 +137,8 @@ export default function WordSearch({ me, partnerId }: { me: Member; partnerId: s
     if (!drag || drag.pointer !== event.pointerId) return;
     const point = pointFromPointer(event);
     if (!point || cellKey(point) === cellKey(drag.end)) return;
+    drag.moved = true;
+    if (!drag.dragging) return;
     drag.end = point;
     setSelection({ start: drag.start, end: point });
   }
@@ -112,13 +150,44 @@ export default function WordSearch({ me, partnerId }: { me: Member; partnerId: s
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
-    claim(drag.start, drag.end);
+    if (drag.dragging && cellKey(drag.start) !== cellKey(drag.end)) {
+      claim(drag.start, drag.end);
+      return;
+    }
+    if (drag.moved) {
+      restoreAnchor(drag.anchor);
+      return;
+    }
+    tapCell(drag.end, drag.anchor);
+  }
+
+  /** A tap marks the first letter, and the next tap closes the word. */
+  function tapCell(cell: WordCell, anchor: WordCell | null) {
+    setCursor(cell);
+    if (!anchor) {
+      setKeyboardStart(cell);
+      setSelection({ start: cell, end: cell });
+      setMessage('Primera letra marcada. Toca la última letra.');
+      return;
+    }
+    if (cellKey(anchor) === cellKey(cell)) {
+      setSelection(null);
+      setMessage('Selección cancelada.');
+      return;
+    }
+    claim(anchor, cell);
+  }
+
+  function restoreAnchor(anchor: WordCell | null) {
+    setKeyboardStart(anchor);
+    setSelection(anchor ? { start: anchor, end: anchor } : null);
   }
 
   function pointerCancel(event: PointerEvent<HTMLDivElement>) {
-    if (dragRef.current?.pointer !== event.pointerId) return;
+    const drag = dragRef.current;
+    if (!drag || drag.pointer !== event.pointerId) return;
     dragRef.current = null;
-    setSelection(null);
+    restoreAnchor(drag.anchor);
   }
 
   function keyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -252,11 +321,24 @@ export default function WordSearch({ me, partnerId }: { me: Member; partnerId: s
         </div>)}
       </div>
 
-      {!finished && <div className="ws-board-scroll"><div ref={boardRef} className="ws-board" role="grid" tabIndex={0}
-        aria-label="Tablero de sopa de letras. Arrastra sobre una palabra; con teclado usa flechas y espacio."
+      {!finished && <fieldset className="ws-size">
+        <legend>Tamaño de las letras</legend>
+        {LETTER_SIZES.map((option) => (
+          <button key={option.id} type="button" aria-pressed={letterSize === option.id}
+            className={letterSize === option.id ? 'selected' : ''}
+            onClick={() => setLetterSize(option.id)}>{option.label}</button>
+        ))}
+      </fieldset>}
+
+      {!finished && <div className="ws-board-scroll"><div ref={boardRef}
+        className={`ws-board ${letterSize === 'fit' ? 'fit' : 'zoom'}`} role="grid" tabIndex={0}
+        aria-label="Tablero de sopa de letras. Toca la primera y la última letra de una palabra, o arrástralas; con teclado usa flechas y espacio."
         aria-rowcount={state.size} aria-colcount={state.size}
         aria-activedescendant={`ws-cell-${cursor.row}-${cursor.col}`}
-        style={{ gridTemplateColumns: `repeat(${state.size}, 1fr)` }}
+        style={{
+          '--ws-size': state.size,
+          '--ws-cell': LETTER_SIZES.find((option) => option.id === letterSize)?.cell ?? 'auto',
+        } as CSSProperties}
         onPointerDown={pointerDown} onPointerMove={pointerMove}
         onPointerUp={pointerUp} onPointerCancel={pointerCancel} onKeyDown={keyDown}>
         {puzzle.board.map((row, rowIndex) => (
@@ -267,6 +349,7 @@ export default function WordSearch({ me, partnerId }: { me: Member; partnerId: s
               const ownerLabel = owner === me.id ? ', encontrada por ti'
                 : owner ? `, encontrada por ${names[owner] || 'tu pareja'}` : '';
               return <span key={key} id={`ws-cell-${rowIndex}-${colIndex}`} role="gridcell"
+                data-row={rowIndex} data-col={colIndex}
                 aria-rowindex={rowIndex + 1} aria-colindex={colIndex + 1}
                 aria-selected={chosen.has(key)}
                 aria-label={`${letter}, fila ${rowIndex + 1}, columna ${colIndex + 1}${ownerLabel}`}
@@ -280,7 +363,8 @@ export default function WordSearch({ me, partnerId }: { me: Member; partnerId: s
         ))}
       </div></div>}
 
-      {message && <p className="ws-message" role="status">{message}</p>}
+      <p className="ws-message" role="status">{message}</p>
+      {!finished && <p className="ws-hint">Toca la primera y la última letra, o arrastra sobre la palabra.</p>}
 
       <section className="card ws-words" aria-labelledby="ws-word-heading">
         <h2 id="ws-word-heading">Palabras</h2>
