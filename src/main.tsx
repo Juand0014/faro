@@ -14,7 +14,7 @@ if ('serviceWorker' in navigator) {
     } catch { /* ignore */ }
   });
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register(import.meta.env.BASE_URL + 'sw.js?v=16').catch(() => {});
+    navigator.serviceWorker.register(import.meta.env.BASE_URL + 'sw.js?v=17').catch(() => {});
   });
 }
 

@@ -338,11 +338,113 @@ grant execute on function claim_word_search_word(uuid, text) to authenticated;
 
 -- 7) PARCHÍS ------------------------------------------------
 -- El servidor es la fuente del dado y serializa cada acción con FOR UPDATE.
+create or replace function parchis_has_legal_move(p_state jsonb, p_seat text)
+returns boolean language plpgsql immutable set search_path = public as $$
+declare
+  v_rival text := case when p_seat = 'a' then 'b' else 'a' end;
+  v_start integer := case when p_seat = 'a' then 5 else 39 end;
+  v_rival_start integer := case when p_seat = 'a' then 39 else 5 end;
+  v_remaining jsonb := coalesce(p_state->'remaining', '[]'::jsonb);
+  v_steps integer;
+  v_piece integer;
+  v_from integer;
+  v_to integer;
+  v_cell integer;
+  v_mine integer;
+  v_enemy integer;
+  v_exit boolean;
+begin
+  if p_seat not in ('a', 'b') or p_state->>'phase' not in ('move', 'bonus') then return false; end if;
+  v_exit := p_state->>'phase' = 'move' and (
+    exists (
+      select 1 from jsonb_array_elements_text(v_remaining) die(value)
+      where value::integer = 5
+    ) or (jsonb_array_length(v_remaining) = 2
+      and (v_remaining->>0)::integer + (v_remaining->>1)::integer = 5)
+  );
+  if v_exit and exists (
+    select 1 from jsonb_array_elements_text(p_state#>array['pieces', p_seat]) position
+    where position::integer = -1
+  ) then
+    select count(*) into v_mine
+      from jsonb_array_elements_text(p_state#>array['pieces', p_seat]) position
+      where position::integer between 0 and 63
+        and ((v_start - 1 + position::integer) % 68) + 1 = v_start;
+    select count(*) into v_enemy
+      from jsonb_array_elements_text(p_state#>array['pieces', v_rival]) position
+      where position::integer between 0 and 63
+        and (((case when v_rival = 'a' then 5 else 39 end) - 1 + position::integer) % 68) + 1 = v_start;
+    if v_mine < 2 and v_enemy < 2 then return true; end if;
+  end if;
+
+  for v_steps in
+    select distinct value::integer
+    from (
+      select value from jsonb_array_elements_text(v_remaining) die(value)
+      where p_state->>'phase' = 'move'
+      union all
+      select p_state->>'bonus' where p_state->>'phase' = 'bonus'
+    ) options
+    where value is not null and value::integer > 0
+  loop
+    for v_piece, v_from in
+      select (ordinal - 1)::integer, position::integer
+      from jsonb_array_elements_text(p_state#>array['pieces', p_seat])
+        with ordinality piece(position, ordinal)
+    loop
+      if v_from < 0 or v_from >= 71 or v_from + v_steps > 71 then continue; end if;
+      v_to := v_from + v_steps;
+      if exists (
+        select 1 from generate_series(v_from + 1, least(v_to, 63)) route(position)
+        where exists (
+          select 1
+          from (
+            select 'a'::text seat, value::integer position
+              from jsonb_array_elements_text(p_state#>'{pieces,a}') value
+            union all
+            select 'b'::text seat, value::integer position
+              from jsonb_array_elements_text(p_state#>'{pieces,b}') value
+          ) occupied
+          where occupied.position between 0 and 63
+            and (((case when occupied.seat = 'a' then 5 else 39 end) - 1 + occupied.position) % 68) + 1
+              = ((v_start - 1 + route.position) % 68) + 1
+          group by occupied.seat having count(*) >= 2
+        )
+      ) then continue; end if;
+
+      if v_to between 64 and 70 and exists (
+        select 1 from jsonb_array_elements_text(p_state#>array['pieces', p_seat]) position
+        where position::integer = v_to
+      ) then continue; end if;
+      if v_to <= 63 then
+        v_cell := ((v_start - 1 + v_to) % 68) + 1;
+        select count(*) into v_mine
+          from jsonb_array_elements_text(p_state#>array['pieces', p_seat])
+            with ordinality piece(position, ordinal)
+          where ordinal - 1 <> v_piece and position::integer between 0 and 63
+            and ((v_start - 1 + position::integer) % 68) + 1 = v_cell;
+        select count(*) into v_enemy
+          from jsonb_array_elements_text(p_state#>array['pieces', v_rival]) position
+          where position::integer between 0 and 63
+            and (((case when v_rival = 'a' then 5 else 39 end) - 1 + position::integer) % 68) + 1 = v_cell;
+        if v_mine >= 2 or v_enemy >= 2
+          or (v_mine = 1 and v_cell = v_rival_start)
+          or (v_enemy = 1 and v_cell = any(array[5,12,17,22,29,34,39,46,51,56,63,68])) then
+          continue;
+        end if;
+      end if;
+      return true;
+    end loop;
+  end loop;
+  return false;
+end $$;
+
 create or replace function roll_parchis(p_game_id uuid)
 returns games language plpgsql security definer set search_path = public as $$
 declare
   v_game games%rowtype;
-  v_dice integer;
+  v_dice_a integer;
+  v_dice_b integer;
   v_streak integer;
 begin
   if auth.uid() is null then raise exception 'no_autenticado'; end if;
@@ -356,13 +458,17 @@ begin
     raise exception 'turno_invalido';
   end if;
 
-  v_dice := floor(random() * 6)::integer + 1;
-  v_streak := case when v_dice = 6
-    then least(3, coalesce((v_game.state->>'sixStreak')::integer, 0) + 1)
+  v_dice_a := floor(random() * 6)::integer + 1;
+  v_dice_b := floor(random() * 6)::integer + 1;
+  v_streak := case when v_dice_a = v_dice_b
+    then least(3, coalesce((v_game.state->>'doublesStreak')::integer, 0) + 1)
     else 0 end;
+  v_game.state := jsonb_set(v_game.state, '{version}', '2', true);
   v_game.state := jsonb_set(v_game.state, '{phase}', '"move"', false);
-  v_game.state := jsonb_set(v_game.state, '{dice}', to_jsonb(v_dice), false);
-  v_game.state := jsonb_set(v_game.state, '{sixStreak}', to_jsonb(v_streak), false);
+  v_game.state := jsonb_set(v_game.state, '{dice}', jsonb_build_array(v_dice_a, v_dice_b), false);
+  v_game.state := jsonb_set(v_game.state, '{remaining}', jsonb_build_array(v_dice_a, v_dice_b), true);
+  v_game.state := jsonb_set(v_game.state, '{doublesStreak}', to_jsonb(v_streak), true);
+  v_game.state := v_game.state - 'sixStreak';
   v_game.state := jsonb_set(v_game.state, '{bonus}', '0', false);
   v_game.state := jsonb_set(v_game.state, '{bonusChain}', '0', false);
   v_game.state := jsonb_set(
@@ -380,7 +486,9 @@ declare
   v_game games%rowtype;
   v_partner uuid;
   v_streak integer;
-  v_dice integer;
+  v_dice_a integer;
+  v_dice_b integer;
+  v_seat text;
 begin
   if auth.uid() is null then raise exception 'no_autenticado'; end if;
   perform set_config('app.parchis_rpc', 'on', true);
@@ -393,19 +501,26 @@ begin
     or coalesce((v_game.state->>'seq')::integer, -1) <> p_expected_seq then
     raise exception 'estado_desactualizado';
   end if;
+  v_seat := case when v_game.state->>'first' = auth.uid()::text then 'a' else 'b' end;
+  if parchis_has_legal_move(v_game.state, v_seat) then
+    raise exception 'movimientos_disponibles';
+  end if;
 
   select id into v_partner from members
     where couple_id = v_game.couple_id and id <> auth.uid()
     order by last_seen desc limit 1;
   if v_partner is null then raise exception 'pareja_no_disponible'; end if;
-  v_dice := coalesce((v_game.state->>'dice')::integer, 0);
-  v_streak := coalesce((v_game.state->>'sixStreak')::integer, 0);
-  v_game.turn := case when v_dice = 6 and v_streak < 3 then auth.uid() else v_partner end;
+  v_dice_a := coalesce((v_game.state#>>'{dice,0}')::integer, 0);
+  v_dice_b := coalesce((v_game.state#>>'{dice,1}')::integer, 0);
+  v_streak := coalesce((v_game.state->>'doublesStreak')::integer, 0);
+  v_game.turn := case when v_dice_a = v_dice_b and v_dice_a > 0 and v_streak < 3
+    then auth.uid() else v_partner end;
   if v_game.turn <> auth.uid() then v_streak := 0; end if;
 
   v_game.state := jsonb_set(v_game.state, '{phase}', '"roll"', false);
   v_game.state := jsonb_set(v_game.state, '{dice}', 'null', false);
-  v_game.state := jsonb_set(v_game.state, '{sixStreak}', to_jsonb(v_streak), false);
+  v_game.state := jsonb_set(v_game.state, '{remaining}', '[]', false);
+  v_game.state := jsonb_set(v_game.state, '{doublesStreak}', to_jsonb(v_streak), false);
   v_game.state := jsonb_set(v_game.state, '{bonus}', '0', false);
   v_game.state := jsonb_set(v_game.state, '{bonusChain}', '0', false);
   v_game.state := jsonb_set(v_game.state, '{seq}', to_jsonb(p_expected_seq + 1), false);
@@ -418,6 +533,7 @@ create or replace function move_parchis(
   p_game_id uuid,
   p_expected_seq integer,
   p_piece integer,
+  p_steps integer,
   p_state jsonb,
   p_next_turn uuid,
   p_status text,
@@ -439,6 +555,23 @@ declare
   v_earned_bonus integer;
   v_bonus_chain integer;
   v_won boolean;
+  v_remaining jsonb;
+  v_expected_remaining jsonb;
+  v_use_ordinal bigint;
+  v_dice_a integer;
+  v_dice_b integer;
+  v_expected_consume jsonb;
+  v_home_count integer;
+  v_start_cell integer;
+  v_start_own integer;
+  v_start_enemy integer;
+  v_exit_available boolean;
+  v_dest_cell integer;
+  v_dest_mine integer;
+  v_dest_enemy integer;
+  v_expected_capture integer;
+  v_bonus_probe jsonb;
+  v_bonus_possible boolean;
 begin
   if auth.uid() is null then raise exception 'no_autenticado'; end if;
   perform set_config('app.parchis_rpc', 'on', true);
@@ -458,9 +591,10 @@ begin
   v_rival := case when v_seat = 'a' then 'b' else 'a' end;
   v_piece_count := (v_game.state->>'pieceCount')::integer;
   if not (p_state ?& array[
-      'version', 'first', 'pieceCount', 'phase', 'dice', 'sixStreak',
+      'version', 'first', 'pieceCount', 'phase', 'dice', 'remaining', 'doublesStreak',
       'bonus', 'bonusChain', 'pieces', 'last', 'seq'
     ])
+    or (p_state->>'version')::integer is distinct from 2
     or v_piece_count not in (2, 3, 4)
     or p_state#>array['pieces', v_seat] is null
     or p_state#>array['pieces', v_rival] is null
@@ -474,25 +608,126 @@ begin
   end if;
   if exists (
     select 1 from jsonb_array_elements_text(p_state#>array['pieces', v_seat]) position
-    where position::integer < -1 or position::integer > 75
+    where position::integer < -1 or position::integer > 71
   ) or exists (
     select 1 from jsonb_array_elements_text(p_state#>array['pieces', v_rival]) position
-    where position::integer < -1 or position::integer > 75
+    where position::integer < -1 or position::integer > 71
   ) then raise exception 'posicion_invalida'; end if;
 
-  v_steps := case when v_phase = 'bonus'
-    then (v_game.state->>'bonus')::integer else (v_game.state->>'dice')::integer end;
-  v_from := (v_game.state#>>array['pieces', v_seat, p_piece::text])::integer;
-  v_to := (p_state#>>array['pieces', v_seat, p_piece::text])::integer;
-  if not ((v_from = -1 and v_steps = 5 and v_to = 0)
-    or (v_from >= 0 and v_from < 75 and v_to = v_from + v_steps and v_to <= 75)) then
+  v_remaining := coalesce(v_game.state->'remaining', '[]'::jsonb);
+  v_exit_available := v_phase = 'move' and (
+    exists (
+      select 1 from jsonb_array_elements_text(v_remaining) die(value)
+      where value::integer = 5
+    )
+    or (jsonb_array_length(v_remaining) = 2
+      and (v_remaining->>0)::integer + (v_remaining->>1)::integer = 5)
+  );
+  v_steps := p_steps;
+  if v_steps is null or v_steps < 1 or v_steps > 20 then
     raise exception 'distancia_invalida';
   end if;
+  if v_phase = 'bonus' then
+    if v_steps is distinct from (v_game.state->>'bonus')::integer then
+      raise exception 'bonus_invalido';
+    end if;
+    v_expected_remaining := v_remaining;
+    v_expected_consume := '[]'::jsonb;
+  else
+    select ordinal into v_use_ordinal
+      from jsonb_array_elements_text(v_remaining) with ordinality die(value, ordinal)
+      where value::integer = v_steps order by ordinal limit 1;
+    if v_use_ordinal is not null then
+      select coalesce(jsonb_agg(value order by ordinal), '[]'::jsonb)
+        into v_expected_remaining
+        from jsonb_array_elements(v_remaining) with ordinality die(value, ordinal)
+        where ordinal <> v_use_ordinal;
+      v_expected_consume := jsonb_build_array(v_steps);
+    elsif v_steps = 5 and jsonb_array_length(v_remaining) = 2
+      and (v_remaining->>0)::integer + (v_remaining->>1)::integer = 5 then
+      v_expected_remaining := '[]'::jsonb;
+      v_expected_consume := v_remaining;
+    else
+      raise exception 'dado_no_disponible';
+    end if;
+  end if;
+  v_from := (v_game.state#>>array['pieces', v_seat, p_piece::text])::integer;
+  v_to := (p_state#>>array['pieces', v_seat, p_piece::text])::integer;
+  if v_exit_available then
+    v_start_cell := case when v_seat = 'a' then 5 else 39 end;
+    select count(*) into v_home_count
+      from jsonb_array_elements_text(v_game.state#>array['pieces', v_seat]) position
+      where position::integer = -1;
+    select count(*) into v_start_own
+      from jsonb_array_elements_text(v_game.state#>array['pieces', v_seat]) position
+      where position::integer between 0 and 63
+        and (((case when v_seat = 'a' then 5 else 39 end) - 1 + position::integer) % 68) + 1 = v_start_cell;
+    select count(*) into v_start_enemy
+      from jsonb_array_elements_text(v_game.state#>array['pieces', v_rival]) position
+      where position::integer between 0 and 63
+        and (((case when v_rival = 'a' then 5 else 39 end) - 1 + position::integer) % 68) + 1 = v_start_cell;
+    if v_home_count > 0 and v_start_own < 2 and v_start_enemy < 2 and v_from <> -1 then
+      raise exception 'salida_obligatoria';
+    end if;
+  end if;
+  if not ((v_from = -1 and v_steps = 5 and v_to = 0)
+    or (v_from >= 0 and v_from < 71 and v_to = v_from + v_steps and v_to <= 71)) then
+    raise exception 'distancia_invalida';
+  end if;
+  if v_from >= 0 and exists (
+    select 1
+    from generate_series(v_from + 1, least(v_to, 63)) route(position)
+    where exists (
+      select 1
+      from (
+        select 'a'::text seat, value::integer position
+          from jsonb_array_elements_text(v_game.state#>'{pieces,a}') value
+        union all
+        select 'b'::text seat, value::integer position
+          from jsonb_array_elements_text(v_game.state#>'{pieces,b}') value
+      ) piece
+      where piece.position between 0 and 63
+        and (((case when piece.seat = 'a' then 5 else 39 end) - 1 + piece.position) % 68) + 1
+          = (((case when v_seat = 'a' then 5 else 39 end) - 1 + route.position) % 68) + 1
+      group by piece.seat
+      having count(*) >= 2
+    )
+  ) then raise exception 'puente_bloqueado'; end if;
+
+  v_expected_capture := null;
+  if v_to between 0 and 63 then
+    v_dest_cell := (((case when v_seat = 'a' then 5 else 39 end) - 1 + v_to) % 68) + 1;
+    select count(*) into v_dest_mine
+      from jsonb_array_elements_text(v_game.state#>array['pieces', v_seat])
+        with ordinality piece(position, ordinal)
+      where ordinal - 1 <> p_piece and position::integer between 0 and 63
+        and (((case when v_seat = 'a' then 5 else 39 end) - 1 + position::integer) % 68) + 1 = v_dest_cell;
+    select count(*), min((ordinal - 1)::integer) into v_dest_enemy, v_expected_capture
+      from jsonb_array_elements_text(v_game.state#>array['pieces', v_rival])
+        with ordinality piece(position, ordinal)
+      where position::integer between 0 and 63
+        and (((case when v_rival = 'a' then 5 else 39 end) - 1 + position::integer) % 68) + 1 = v_dest_cell;
+    if v_dest_mine >= 2 or v_dest_enemy >= 2 then raise exception 'destino_bloqueado'; end if;
+    if v_dest_mine = 1 and v_dest_cell = (case when v_rival = 'a' then 5 else 39 end) then
+      raise exception 'puente_en_salida_rival';
+    end if;
+    if v_dest_enemy = 1 and v_dest_cell = any(array[5,12,17,22,29,34,39,46,51,56,63,68])
+      and not (v_from = -1 and v_dest_cell = v_start_cell) then
+      raise exception 'seguro_ocupado';
+    end if;
+    if v_dest_enemy = 0 then v_expected_capture := null; end if;
+  elsif v_to < 71 and exists (
+    select 1 from jsonb_array_elements_text(v_game.state#>array['pieces', v_seat]) position
+    where position::integer = v_to
+  ) then raise exception 'pasillo_ocupado'; end if;
   if p_state#>>'{last,seat}' is distinct from v_seat
     or (p_state#>>'{last,piece}')::integer <> p_piece
     or (p_state#>>'{last,from}')::integer <> v_from
     or (p_state#>>'{last,to}')::integer <> v_to
-    or (p_state#>>'{last,steps}')::integer <> v_steps then
+    or (p_state#>>'{last,steps}')::integer <> v_steps
+    or p_state#>'{last,consume}' is distinct from v_expected_consume
+    or p_state#>'{last,capture}' is distinct from coalesce(to_jsonb(v_expected_capture), 'null'::jsonb)
+    or p_state->'remaining' is distinct from v_expected_remaining then
     raise exception 'resumen_movimiento_invalido';
   end if;
 
@@ -508,6 +743,11 @@ begin
     where v_game.state#>>array['pieces', v_rival, index::text]
       is distinct from p_state#>>array['pieces', v_rival, index::text];
   if v_changed > 1 then raise exception 'captura_invalida'; end if;
+  if (v_expected_capture is null and v_changed <> 0)
+    or (v_expected_capture is not null and (
+      v_changed <> 1
+      or (p_state#>>array['pieces', v_rival, v_expected_capture::text])::integer <> -1
+    )) then raise exception 'captura_invalida'; end if;
   if v_changed = 1 and exists (
     select 1 from generate_series(0, v_piece_count - 1) index
     where v_game.state#>>array['pieces', v_rival, index::text]
@@ -521,21 +761,37 @@ begin
   if v_partner is null then raise exception 'pareja_no_disponible'; end if;
   v_won := not exists (
     select 1 from jsonb_array_elements_text(p_state#>array['pieces', v_seat]) position
-    where position::integer <> 75
+    where position::integer <> 71
   );
-  v_earned_bonus := case when v_changed = 1 then 20 when v_to = 75 then 10 else 0 end;
+  v_earned_bonus := case when v_changed = 1 then 20 when v_to = 71 then 10 else 0 end;
+  if (p_state#>>'{last,bonus}')::integer is distinct from v_earned_bonus then
+    raise exception 'resumen_bonus_invalido';
+  end if;
   v_bonus_chain := coalesce((v_game.state->>'bonusChain')::integer, 0);
+  v_bonus_probe := jsonb_set(
+    jsonb_set(p_state, '{phase}', '"bonus"', true),
+    '{bonus}', to_jsonb(v_earned_bonus), true
+  );
+  v_bonus_possible := v_earned_bonus > 0
+    and v_bonus_chain < 4
+    and parchis_has_legal_move(v_bonus_probe, v_seat);
+  v_dice_a := coalesce((v_game.state#>>'{dice,0}')::integer, 0);
+  v_dice_b := coalesce((v_game.state#>>'{dice,1}')::integer, 0);
   v_expected_turn := case
     when v_won then null
     when v_earned_bonus > 0 and v_bonus_chain < 4 then auth.uid()
-    when (v_game.state->>'dice')::integer = 6
-      and (v_game.state->>'sixStreak')::integer < 3 then auth.uid()
+    when jsonb_array_length(v_expected_remaining) > 0 then auth.uid()
+    when v_dice_a = v_dice_b and v_dice_a > 0
+      and (v_game.state->>'doublesStreak')::integer < 3 then auth.uid()
     else v_partner end;
 
   if v_won then
     if p_status <> 'won' or p_winner is distinct from auth.uid()
       or p_next_turn is not null or p_state->>'phase' <> 'over'
-      or (p_state->>'bonus')::integer is distinct from 0 then
+      or (p_state->>'bonus')::integer is distinct from 0
+      or p_state->'dice' is distinct from 'null'::jsonb
+      or p_state->'remaining' is distinct from '[]'::jsonb
+      or (p_state->>'doublesStreak')::integer is distinct from 0 then
       raise exception 'victoria_invalida';
     end if;
   elsif p_status <> 'active' or p_winner is not null then
@@ -544,53 +800,92 @@ begin
     -- El cliente puede perder el bonus si no existe destino legal, pero nunca inventarlo
     -- ni transferir el turno a una tercera persona.
     if p_state->>'phase' = 'bonus' then
+      if not v_bonus_possible then raise exception 'bonus_sin_destino'; end if;
       if p_next_turn is distinct from auth.uid()
         or (p_state->>'bonus')::integer is distinct from v_earned_bonus
         or (p_state->>'bonusChain')::integer is distinct from v_bonus_chain + 1
         or p_state->>'dice' is distinct from v_game.state->>'dice'
-        or p_state->>'sixStreak' is distinct from v_game.state->>'sixStreak' then
+        or p_state->'remaining' is distinct from v_expected_remaining
+        or p_state->>'doublesStreak' is distinct from v_game.state->>'doublesStreak' then
         raise exception 'bonus_invalido';
       end if;
-    elsif p_state->>'phase' = 'roll' then
+    elsif not v_bonus_possible and p_state->>'phase' = 'move'
+      and jsonb_array_length(v_expected_remaining) > 0 then
+      if p_next_turn is distinct from auth.uid()
+        or (p_state->>'bonus')::integer is distinct from 0
+        or (p_state->>'bonusChain')::integer is distinct from v_bonus_chain + 1
+        or p_state->'dice' is distinct from v_game.state->'dice'
+        or p_state->'remaining' is distinct from v_expected_remaining
+        or p_state->>'doublesStreak' is distinct from v_game.state->>'doublesStreak' then
+        raise exception 'cierre_bonus_invalido';
+      end if;
+    elsif not v_bonus_possible and p_state->>'phase' = 'roll' then
       if (p_state->>'bonus')::integer is distinct from 0
         or (p_state->>'bonusChain')::integer is distinct from 0
         or p_state->'dice' is distinct from 'null'::jsonb
+        or p_state->'remaining' is distinct from '[]'::jsonb
         or p_next_turn is distinct from (
-          case when (v_game.state->>'dice')::integer = 6
-            and (v_game.state->>'sixStreak')::integer < 3 then auth.uid() else v_partner end
+          case when v_dice_a = v_dice_b and v_dice_a > 0
+            and (v_game.state->>'doublesStreak')::integer < 3 then auth.uid() else v_partner end
         )
-        or (p_state->>'sixStreak')::integer is distinct from (
+        or (p_state->>'doublesStreak')::integer is distinct from (
           case when p_next_turn = auth.uid()
-            then (v_game.state->>'sixStreak')::integer else 0 end
+            then (v_game.state->>'doublesStreak')::integer else 0 end
         ) then raise exception 'cierre_bonus_invalido'; end if;
     else raise exception 'fase_siguiente_invalida';
     end if;
   else
-    if p_state->>'phase' <> 'roll'
+    if (jsonb_array_length(v_expected_remaining) > 0 and (
+        p_state->>'phase' <> 'move'
+        or p_state->'dice' is distinct from v_game.state->'dice'
+        or p_state->'remaining' is distinct from v_expected_remaining
+        or p_next_turn is distinct from auth.uid()
+        or p_state->>'doublesStreak' is distinct from v_game.state->>'doublesStreak'
+      )) or (jsonb_array_length(v_expected_remaining) = 0 and (
+        p_state->>'phase' <> 'roll'
+        or p_state->'dice' is distinct from 'null'::jsonb
+        or p_state->'remaining' is distinct from '[]'::jsonb
+        or p_next_turn is distinct from v_expected_turn
+        or (p_state->>'doublesStreak')::integer is distinct from (
+          case when v_expected_turn = auth.uid()
+            then (v_game.state->>'doublesStreak')::integer else 0 end
+        )
+      ))
       or (p_state->>'bonus')::integer is distinct from 0
       or (p_state->>'bonusChain')::integer is distinct from 0
-      or p_state->'dice' is distinct from 'null'::jsonb
-      or p_next_turn is distinct from v_expected_turn
-      or (p_state->>'sixStreak')::integer is distinct from (
-        case when v_expected_turn = auth.uid()
-          then (v_game.state->>'sixStreak')::integer else 0 end
-      ) then
+      then
       raise exception 'turno_siguiente_invalido';
     end if;
   end if;
 
+  p_state := jsonb_build_object(
+    'version', p_state->'version',
+    'first', p_state->'first',
+    'pieceCount', p_state->'pieceCount',
+    'phase', p_state->'phase',
+    'dice', p_state->'dice',
+    'remaining', p_state->'remaining',
+    'doublesStreak', p_state->'doublesStreak',
+    'bonus', p_state->'bonus',
+    'bonusChain', p_state->'bonusChain',
+    'pieces', p_state->'pieces',
+    'last', p_state->'last',
+    'seq', p_state->'seq'
+  );
   update games set state = p_state, turn = p_next_turn, status = p_status,
     winner = p_winner, updated_at = now()
     where id = v_game.id returning * into v_game;
   return v_game;
 end $$;
 
+revoke all on function parchis_has_legal_move(jsonb, text) from public;
 revoke all on function roll_parchis(uuid) from public;
 revoke all on function pass_parchis(uuid, integer) from public;
-revoke all on function move_parchis(uuid, integer, integer, jsonb, uuid, text, uuid) from public;
+drop function if exists move_parchis(uuid, integer, integer, jsonb, uuid, text, uuid);
+revoke all on function move_parchis(uuid, integer, integer, integer, jsonb, uuid, text, uuid) from public;
 grant execute on function roll_parchis(uuid) to authenticated;
 grant execute on function pass_parchis(uuid, integer) to authenticated;
-grant execute on function move_parchis(uuid, integer, integer, jsonb, uuid, text, uuid) to authenticated;
+grant execute on function move_parchis(uuid, integer, integer, integer, jsonb, uuid, text, uuid) to authenticated;
 
 create or replace function guard_parchis_direct_update()
 returns trigger language plpgsql security invoker set search_path = public as $$
@@ -598,7 +893,13 @@ begin
   if old.type = 'parchis'
     and current_setting('app.parchis_rpc', true) is distinct from 'on'
     and current_role not in ('postgres', 'service_role') then
-    if old.status = 'active' and new.status = 'abandoned' then
+    if old.status = 'active' and new.status = 'abandoned'
+      and new.type is not distinct from old.type
+      and new.couple_id is not distinct from old.couple_id
+      and new.turn is not distinct from old.turn
+      and new.winner is not distinct from old.winner
+      and new.state->>'stoppedBy' = auth.uid()::text
+      and (new.state - 'stoppedBy') = (old.state - 'rematch') then
       return new;
     end if;
     if old.status <> 'active' and new.status = old.status
