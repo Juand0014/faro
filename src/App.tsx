@@ -24,6 +24,7 @@ import type { GameRow } from './lib/useGame';
 
 const WordSearch = lazy(() => import('./games/WordSearch'));
 const Parchis = lazy(() => import('./games/Parchis'));
+const Domino = lazy(() => import('./games/Domino'));
 
 export default function App() {
   const [ready, setReady] = useState(false);
@@ -150,6 +151,11 @@ function AppShell({ member, partnerId, route }: { member: Member; partnerId: str
   else if (route.startsWith('/game/parchis')) screen = (
     <Suspense fallback={<div className="wrap"><p className="muted">Preparando el tablero…</p></div>}>
       <Parchis me={member} partnerId={partnerId} />
+    </Suspense>
+  );
+  else if (route.startsWith('/game/domino')) screen = (
+    <Suspense fallback={<div className="wrap"><p className="muted">Preparando la mesa…</p></div>}>
+      <Domino me={member} partnerId={partnerId} />
     </Suspense>
   );
   else screen = <Home me={member} activeGames={active} rematches={rematches} />;

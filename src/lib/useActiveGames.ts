@@ -10,6 +10,7 @@ export const GAME_META: Record<string, { name: string; href: string; icon: strin
   draw: { name: 'Pictionary', href: '#/game/draw', icon: '🎨' },
   ships: { name: 'Batalla naval', href: '#/game/ships', icon: '🚢' },
   parchis: { name: 'Parchís', href: '#/game/parchis', icon: '🎲' },
+  domino: { name: 'Dominó', href: '#/game/domino', icon: '🁫' },
   wordsearch: { name: 'Sopa de letras', href: '#/game/wordsearch', icon: '🔎' },
   look: { name: 'Atelier', href: '#/game/look', icon: '👗' },
 };

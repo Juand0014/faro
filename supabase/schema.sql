@@ -916,3 +916,225 @@ end $$;
 drop trigger if exists guard_parchis_direct_update_trigger on games;
 create trigger guard_parchis_direct_update_trigger
 before update on games for each row execute function guard_parchis_direct_update();
+
+-- 8) DOMINÓ -------------------------------------------------
+-- Las manos y el pozo viven fuera de `games`, cuya fila se publica por Realtime.
+create table if not exists domino_private (
+  game_id     uuid primary key references games(id) on delete cascade,
+  state       jsonb not null,
+  updated_at  timestamptz not null default now()
+);
+alter table domino_private enable row level security;
+revoke all on table domino_private from public, anon, authenticated;
+grant select, insert, update, delete on table domino_private to service_role;
+
+-- Único punto de escritura del motor. El FOR UPDATE serializa la comprobación de
+-- seq y ambas escrituras pertenecen a la misma transacción PostgreSQL.
+create or replace function domino_commit(
+  p_game_id uuid,
+  p_expected_seq integer,
+  p_public_state jsonb,
+  p_private_state jsonb,
+  p_next_turn uuid,
+  p_status text
+)
+returns games language plpgsql security invoker set search_path = public as $$
+declare
+  v_game games%rowtype;
+  v_has_private boolean;
+begin
+  if current_role <> 'service_role' then raise exception 'service_role_required'; end if;
+  if p_expected_seq is null or p_expected_seq < 0 then raise exception 'seq_invalido'; end if;
+  if p_status not in ('active', 'won') then raise exception 'estado_invalido'; end if;
+  if p_public_state is null
+    or p_public_state::text ~* '"(hands|hand|boneyard|private|private_state|privateState|secret|token|password|deck|tiles)"[[:space:]]*:'
+    or not (p_public_state ?& array[
+      'version', 'first', 'phase', 'config', 'confirmations', 'seats', 'scores',
+      'roundNo', 'turnSeat', 'opener', 'board', 'ends', 'handCounts',
+      'boneyardCount', 'passes', 'result', 'roundPips', 'winnerTeam', 'seq', 'lastEvents'
+    ])
+    or (p_public_state - array[
+      'version', 'first', 'phase', 'config', 'confirmations', 'seats', 'scores',
+      'roundNo', 'turnSeat', 'opener', 'board', 'ends', 'handCounts',
+      'boneyardCount', 'passes', 'result', 'roundPips', 'winnerTeam', 'seq', 'lastEvents'
+    ]) <> '{}'::jsonb then
+    raise exception 'estado_publico_inseguro';
+  end if;
+  if coalesce(p_public_state->>'seq', '') !~ '^[0-9]+$'
+    or (p_public_state->>'seq')::integer <= p_expected_seq then
+    raise exception 'seq_publico_invalido';
+  end if;
+
+  perform set_config('app.domino_rpc', 'on', true);
+  select * into v_game from games where id = p_game_id and type = 'domino' for update;
+  if not found then raise exception 'partida_invalida'; end if;
+  if v_game.status <> 'active'
+    or coalesce((v_game.state->>'seq')::integer, -1) <> p_expected_seq then
+    raise exception 'estado_desactualizado';
+  end if;
+  if p_public_state->>'phase' not in ('lobby', 'play', 'between', 'over')
+    or p_public_state->>'version' <> '1'
+    or not exists (
+      select 1 from members
+      where id::text = p_public_state->>'first' and couple_id = v_game.couple_id
+    )
+    or (p_status = 'won') is distinct from (p_public_state->>'phase' = 'over')
+    or (p_status = 'won') is distinct from (p_public_state->'winnerTeam' <> 'null'::jsonb)
+  then
+    raise exception 'estado_publico_invalido';
+  end if;
+  if p_next_turn is not null and not exists (
+    select 1 from members where id = p_next_turn and couple_id = v_game.couple_id
+  ) then
+    raise exception 'turno_fuera_de_pareja';
+  end if;
+
+  select exists(select 1 from domino_private where game_id = p_game_id) into v_has_private;
+  if p_private_state is null then
+    if v_has_private then raise exception 'estado_privado_requerido'; end if;
+  else
+    if coalesce((p_private_state->>'seq')::integer, -1)
+      <> coalesce((p_public_state->>'seq')::integer, -2) then
+      raise exception 'seq_privado_invalido';
+    end if;
+    insert into domino_private(game_id, state, updated_at)
+      values (p_game_id, p_private_state, now())
+      on conflict (game_id) do update set state = excluded.state, updated_at = excluded.updated_at;
+  end if;
+
+  p_public_state := jsonb_build_object(
+    'version', p_public_state->'version',
+    'first', p_public_state->'first',
+    'phase', p_public_state->'phase',
+    'config', p_public_state->'config',
+    'confirmations', p_public_state->'confirmations',
+    'seats', p_public_state->'seats',
+    'scores', p_public_state->'scores',
+    'roundNo', p_public_state->'roundNo',
+    'turnSeat', p_public_state->'turnSeat',
+    'opener', p_public_state->'opener',
+    'board', p_public_state->'board',
+    'ends', p_public_state->'ends',
+    'handCounts', p_public_state->'handCounts',
+    'boneyardCount', p_public_state->'boneyardCount',
+    'passes', p_public_state->'passes',
+    'result', p_public_state->'result',
+    'roundPips', p_public_state->'roundPips',
+    'winnerTeam', p_public_state->'winnerTeam',
+    'seq', p_public_state->'seq',
+    'lastEvents', p_public_state->'lastEvents'
+  );
+  update games set state = p_public_state, turn = p_next_turn, status = p_status,
+    winner = null, updated_at = now()
+    where id = p_game_id returning * into v_game;
+  return v_game;
+end $$;
+
+revoke all on function domino_commit(uuid, integer, jsonb, jsonb, uuid, text) from public, anon, authenticated;
+grant execute on function domino_commit(uuid, integer, jsonb, jsonb, uuid, text) to service_role;
+
+-- Nunca se permite introducir secretos en una fila pública, ni saltarse el motor
+-- durante una partida. Se conservan las formas actuales de detener y pedir revancha.
+create or replace function guard_domino_update()
+returns trigger language plpgsql security invoker set search_path = public as $$
+begin
+  if tg_op = 'UPDATE' and (old.type = 'domino' or new.type = 'domino')
+    and (new.type is distinct from old.type or new.couple_id is distinct from old.couple_id) then
+    raise exception 'domino_identidad_inmutable';
+  end if;
+
+  if new.type = 'domino' and (
+    new.state is null
+    or new.state::text ~* '"(hands|hand|boneyard|private|private_state|privateState|secret|token|password|deck|tiles)"[[:space:]]*:'
+    or new.state ? 'round'
+  ) then
+    raise exception 'estado_publico_inseguro';
+  end if;
+
+  if tg_op = 'INSERT' and new.type = 'domino' and (
+    new.status <> 'active'
+    or new.turn is not null
+    or new.winner is not null
+    or not (new.state ?& array[
+      'version', 'first', 'phase', 'config', 'confirmations', 'seats', 'scores',
+      'roundNo', 'turnSeat', 'opener', 'board', 'ends', 'handCounts',
+      'boneyardCount', 'passes', 'result', 'roundPips', 'winnerTeam', 'seq', 'lastEvents'
+    ])
+    or (new.state - array[
+      'version', 'first', 'phase', 'config', 'confirmations', 'seats', 'scores',
+      'roundNo', 'turnSeat', 'opener', 'board', 'ends', 'handCounts',
+      'boneyardCount', 'passes', 'result', 'roundPips', 'winnerTeam', 'seq', 'lastEvents'
+    ]) <> '{}'::jsonb
+    or new.state->>'phase' <> 'lobby'
+    or new.state->>'version' <> '1'
+    or not exists (
+      select 1 from members
+      where id::text = new.state->>'first' and couple_id = new.couple_id
+    )
+    or jsonb_typeof(new.state->'config') <> 'object'
+    or new.state#>>'{config,mode}' not in ('duel', 'partners')
+    or new.state#>>'{config,blockedRule}' not in ('general', 'patio')
+    or (
+      new.state#>>'{config,mode}' = 'partners'
+      and coalesce(new.state#>>'{config,handSize}', '') !~ '^[1-7]$'
+    )
+    or (
+      new.state#>>'{config,mode}' = 'duel'
+      and coalesce(new.state#>>'{config,handSize}', '') !~ '^([1-9]|1[0-4])$'
+    )
+    or coalesce(new.state#>>'{config,target}', '') !~ '^[1-9][0-9]*$'
+    or coalesce(new.state#>>'{config,capicuaBonus}', '') !~ '^[0-9]+$'
+    or jsonb_typeof(new.state#>'{config,drawFromBoneyard}') <> 'boolean'
+    or (
+      (new.state#>>'{config,mode}' = 'partners' and new.state#>>'{config,handSize}' = '7')
+      or (new.state#>>'{config,mode}' = 'duel' and new.state#>>'{config,handSize}' = '14')
+    ) and new.state#>>'{config,drawFromBoneyard}' = 'true'
+    or new.state->'confirmations' <> '[]'::jsonb
+    or new.state->'seats' <> '[]'::jsonb
+    or new.state->'scores' <> '[0,0]'::jsonb
+    or new.state->'board' <> '[]'::jsonb
+    or new.state->'handCounts' is distinct from (
+      case when new.state#>>'{config,mode}' = 'partners'
+        then '[0,0,0,0]'::jsonb else '[0,0]'::jsonb end
+    )
+    or new.state->'lastEvents' <> '[]'::jsonb
+    or new.state->'ends' <> 'null'::jsonb
+    or new.state->'turnSeat' <> 'null'::jsonb
+    or new.state->'opener' <> 'null'::jsonb
+    or new.state->'result' <> 'null'::jsonb
+    or new.state->'roundPips' <> 'null'::jsonb
+    or new.state->'winnerTeam' <> 'null'::jsonb
+    or new.state->>'seq' <> '0'
+    or new.state->>'roundNo' <> '0'
+    or new.state->>'boneyardCount' <> '0'
+    or new.state->>'passes' <> '0'
+  ) then
+    raise exception 'lobby_domino_invalido';
+  end if;
+
+  if tg_op = 'UPDATE' and old.type = 'domino'
+    and current_setting('app.domino_rpc', true) is distinct from 'on'
+    and current_role not in ('postgres', 'service_role') then
+    if old.status = 'active' and new.status = 'abandoned'
+      and new.type is not distinct from old.type
+      and new.couple_id is not distinct from old.couple_id
+      and new.turn is not distinct from old.turn
+      and new.winner is not distinct from old.winner
+      and new.state->>'stoppedBy' = auth.uid()::text
+      and (new.state - 'stoppedBy') = (old.state - 'rematch') then
+      return new;
+    end if;
+    if old.status <> 'active' and new.status = old.status
+      and new.turn is not distinct from old.turn
+      and new.winner is not distinct from old.winner
+      and (new.state - 'rematch') = (old.state - 'rematch') then
+      return new;
+    end if;
+    raise exception 'usa_funcion_domino';
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists guard_domino_update_trigger on games;
+create trigger guard_domino_update_trigger
+before insert or update on games for each row execute function guard_domino_update();

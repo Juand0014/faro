@@ -8,6 +8,7 @@ import { initialPictionaryState } from './pictionary';
 import { initialBattleshipState } from './battleship';
 import { initialWordSearchState } from './wordSearch';
 import { initialParchisState } from './parchis';
+import { initialDominoLobby } from './dominoClient';
 
 export type Rematch = { from: string; status: 'pending' | 'accepted' | 'rejected' };
 
@@ -31,6 +32,7 @@ export function freshState(type: string, first: string, prev?: any) {
   if (type === 'ships') return initialBattleshipState(first);
   if (type === 'wordsearch') return initialWordSearchState(first, prev?.nextCategory || prev?.category);
   if (type === 'parchis') return initialParchisState(first, prev?.pieceCount);
+  if (type === 'domino') return initialDominoLobby(first, prev?.config);
   return { board: Array(9).fill(''), first };
 }
 
@@ -62,7 +64,7 @@ export async function startAcceptedGame(game: GameRow) {
   const first = game.state?.rematch?.from || game.state?.first;
   await saveState(game, { from: first, status: 'accepted' });
   const state = freshState(game.type, first, game.state);
-  const turn = game.type === 'stop' || game.type === 'wordsearch' ? null
+  const turn = game.type === 'stop' || game.type === 'wordsearch' || game.type === 'domino' ? null
     : game.type === 'hang' ? (state as { setter: string }).setter
       : game.type === 'draw' ? (state as { drawer: string }).drawer
         : first;
@@ -110,10 +112,10 @@ export function useGame(type: string, me: Member, initial: () => any) {
       .select('*').eq('couple_id', me.couple_id).eq('type', type)
       .order('updated_at', { ascending: false }).limit(12);
     const rows = (data as GameRow[]) ?? [];
-    const pending = rows.find((g) => g.status !== 'active' && rematchOf(g)?.status === 'pending');
-    if (pending) return pending;
     const active = rows.find((g) => g.status === 'active');
     if (active) return active;
+    const pending = rows.find((g) => g.status !== 'active' && rematchOf(g)?.status === 'pending');
+    if (pending) return pending;
     return rows[0] ?? null;
   }, [me.couple_id, type]);
 
@@ -182,7 +184,7 @@ export function useGame(type: string, me: Member, initial: () => any) {
     }
     const { data, error } = await supabase.from('games')
       .insert({ couple_id: me.couple_id, type, state: initial(),
-        turn: type === 'stop' || type === 'wordsearch' ? null : firstTurn, status: 'active' })
+        turn: type === 'stop' || type === 'wordsearch' || type === 'domino' ? null : firstTurn, status: 'active' })
       .select().single();
     if (error) {
       const raced = await loadLatest();
@@ -217,10 +219,12 @@ export function useGame(type: string, me: Member, initial: () => any) {
     setGame({ ...current, status: 'abandoned', state: stopped });
     if (mode === 'exit') return;
 
-    const state = type === 'wordsearch' ? freshState(type, me.id, current.state) : initial();
+    const state = type === 'wordsearch' || type === 'domino'
+      ? freshState(type, me.id, current.state)
+      : initial();
     const { data } = await supabase.from('games')
       .insert({ couple_id: me.couple_id, type, state,
-        turn: type === 'stop' || type === 'wordsearch' ? null : me.id, status: 'active' })
+        turn: type === 'stop' || type === 'wordsearch' || type === 'domino' ? null : me.id, status: 'active' })
       .select().single();
     if (data) setGame(data as GameRow);
   }, [initial, me.couple_id, me.id, type]);

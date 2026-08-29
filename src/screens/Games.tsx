@@ -9,6 +9,7 @@ const list = [
   { href: '/game/draw', type: 'draw', icon: '🎨', name: 'Pictionary', desc: 'Dibuja la palabra para que tu pareja la adivine.' },
   { href: '/game/ships', type: 'ships', icon: '🚢', name: 'Batalla naval', desc: 'Prepara tu flota y hunde la de tu pareja.' },
   { href: '/game/parchis', type: 'parchis', icon: '🎲', name: 'Parchís', desc: 'El de toda la vida para dos, con puentes, premios y reacciones.' },
+  { href: '/game/domino', type: 'domino', icon: '🁫', name: 'Dominó', desc: 'Mesa dominicana: duelo o ustedes dos de frente contra bots.' },
   { href: '/game/wordsearch', type: 'wordsearch', icon: '🔎', name: 'Sopa de letras', desc: 'Encuentren palabras a la vez. Cada palabra es para quien llegue primero.' },
   { href: '/game/look', type: 'look', icon: '👗', name: 'Atelier', desc: 'Crea un croquis libre o acepta un reto. Tu pareja lo puntúa y queda guardado.' },
 ];
