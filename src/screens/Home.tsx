@@ -45,6 +45,9 @@ export default function Home({ me, activeGames, rematches }: { me: Member; activ
 
   const membersRef = useRef(members);
   membersRef.current = members;
+  const flashTimer = useRef<number | undefined>(undefined);
+
+  useEffect(() => () => window.clearTimeout(flashTimer.current), []);
 
   useEffect(() => {
     // pings entrantes
@@ -84,14 +87,26 @@ export default function Home({ me, activeGames, rematches }: { me: Member; activ
     return false;
   }
 
+  function showFlash(text: string, ms: number) {
+    window.clearTimeout(flashTimer.current);
+    setFlash(text);
+    flashTimer.current = window.setTimeout(() => setFlash(null), ms);
+  }
+
   async function think() {
     if (canNotify() && Notification.permission === 'default') {
       await askPhonePermission();
     }
-    setBeacon(true); navigator.vibrate?.(60); setFlash('Señal enviada 🌟');
-    setTimeout(() => setBeacon(false), 900); setTimeout(() => setFlash(null), 2000);
+    setBeacon(true); navigator.vibrate?.(60);
+    showFlash('Señal enviada 🌟', 2000);
+    setTimeout(() => setBeacon(false), 900);
     await supabase.from('pings').insert({ couple_id: me.couple_id, from_id: me.id });
-    notifyPartner();
+    const push = await notifyPartner();
+    if (!push.ok) {
+      showFlash(push.reason === 'sin-aparato'
+        ? 'Señal enviada, pero su teléfono aún no tiene los avisos activados.'
+        : 'Señal enviada, pero el aviso no llegó a su teléfono.', 4500);
+    }
   }
 
   const partner = members.find((m) => m.id !== me.id) || null;

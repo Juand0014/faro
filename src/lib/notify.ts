@@ -95,14 +95,43 @@ export async function enablePingNotices(me: { id: string; couple_id: string }) {
   return perm;
 }
 
-export async function notifyPartner() {
-  try { await supabase.functions.invoke('notify-ping'); } catch { /* aviso local si la pestaña está abierta */ }
+export type PushResult = {
+  ok: boolean;
+  sent: number;
+  total: number;
+  reason: 'ok' | 'sin-aparato' | 'servidor' | 'red';
+};
+
+async function sendPush(body?: { type: 'chat'; text: string }): Promise<PushResult> {
+  try {
+    const { data, error } = await supabase.functions.invoke('notify-ping', body ? { body } : {});
+    if (error) {
+      console.warn('faro: el servidor de avisos respondió con error', error);
+      return { ok: false, sent: 0, total: 0, reason: 'servidor' };
+    }
+    const sent = Number((data as { sent?: unknown })?.sent ?? 0);
+    const total = Number((data as { total?: unknown })?.total ?? 0);
+    if (!total) {
+      console.warn('faro: tu pareja no tiene ningún aparato registrado para avisos');
+      return { ok: false, sent: 0, total: 0, reason: 'sin-aparato' };
+    }
+    if (!sent) {
+      console.warn('faro: el servicio de push rechazó el aviso', data);
+      return { ok: false, sent, total, reason: 'servidor' };
+    }
+    return { ok: true, sent, total, reason: 'ok' };
+  } catch (err) {
+    console.warn('faro: no se pudo contactar el servidor de avisos', err);
+    return { ok: false, sent: 0, total: 0, reason: 'red' };
+  }
 }
 
-export async function notifyChat(text: string) {
+export function notifyPartner() {
+  return sendPush();
+}
+
+export function notifyChat(text: string) {
   const body = text.trim().slice(0, 280);
-  if (!body) return;
-  try {
-    await supabase.functions.invoke('notify-ping', { body: { type: 'chat', text: body } });
-  } catch { /* el otro aparato lo ve por realtime si está abierto */ }
+  if (!body) return Promise.resolve<PushResult>({ ok: false, sent: 0, total: 0, reason: 'red' });
+  return sendPush({ type: 'chat', text: body });
 }

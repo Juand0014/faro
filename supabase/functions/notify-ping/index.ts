@@ -20,7 +20,10 @@ Deno.serve(async (req) => {
 
   const vapidPub = Deno.env.get("VAPID_PUBLIC_KEY");
   const vapidPriv = Deno.env.get("VAPID_PRIVATE_KEY");
-  if (!vapidPub || !vapidPriv) return json({ error: "vapid missing" }, 500);
+  if (!vapidPub || !vapidPriv) {
+    console.error("vapid_missing: falta VAPID_PUBLIC_KEY o VAPID_PRIVATE_KEY en los secretos del proyecto");
+    return json({ error: "vapid missing" }, 500);
+  }
 
   const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
   const admin = createClient(
@@ -58,6 +61,8 @@ Deno.serve(async (req) => {
     ? { title: "Desde faro · " + who, body: chatText, tag: "faro-chat", url: "./#/chat" }
     : { title: "Desde faro", body: who + " piensa en ti", tag: "faro-ping", url: "./#/home" });
 
+  const total = (subs || []).length;
+  const failures: { status: number | null; reason: string }[] = [];
   let sentCount = 0;
   for (const s of subs || []) {
     try {
@@ -68,10 +73,16 @@ Deno.serve(async (req) => {
       );
       sentCount += 1;
     } catch (err: any) {
-      if (err && (err.statusCode === 404 || err.statusCode === 410)) {
+      const status = typeof err?.statusCode === "number" ? err.statusCode : null;
+      const reason = String(err?.body || err?.message || err).slice(0, 200);
+      // Sin esto un fallo del servicio de push es invisible: la app cree que avisó.
+      console.error("push_failed", JSON.stringify({ kind, status, reason }));
+      failures.push({ status, reason });
+      if (status === 404 || status === 410) {
         await admin.from("push_subs").delete().eq("endpoint", s.endpoint);
       }
     }
   }
-  return json({ sent: sentCount });
+  if (total === 0) console.error("push_no_subs", JSON.stringify({ couple: me.couple_id }));
+  return json({ sent: sentCount, total, failed: failures.length, failures });
 });
